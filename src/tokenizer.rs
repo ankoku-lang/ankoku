@@ -301,12 +301,16 @@ mod tests {
     }
     #[test]
     fn numbers() {
-        let tokenizer = Tokenizer::new("1000");
+        let tokenizer = Tokenizer::new("1000 500.5");
         let tokens = tokenizer.map(|v| v.kind).collect::<Vec<_>>();
         println!("{:?}", tokens);
         assert_eq!(
             tokens,
-            vec![TokenType::Number("1000".into()), TokenType::EOF]
+            vec![
+                TokenType::Number("1000".into()),
+                TokenType::Number("500.5".into()),
+                TokenType::EOF
+            ]
         );
     }
 }
