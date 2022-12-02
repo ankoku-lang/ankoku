@@ -4,9 +4,9 @@ use std::{
 };
 
 use crate::{
-    ast::{AstNode, AstType},
-    error::EscuroError,
-    tokenizer::{Token, TokenType},
+    parser::ast::{AstNode, AstType},
+    parser::tokenizer::{Token, TokenType},
+    util::error::EscuroError,
 };
 pub type ParserResult<T> = Result<T, ParserError>;
 #[derive(Clone)]

@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
 use crate::{
-    parser::{Parser, ParserResult},
-    tokenizer::Token,
+    parser::parser::{Parser, ParserResult},
+    parser::tokenizer::Token,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,9 +57,9 @@ impl Display for AstNode {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ast::AstNode,
-        parser::{ParserError, ParserErrorType, ParserResult},
-        tokenizer::Tokenizer,
+        parser::ast::AstNode,
+        parser::parser::{ParserErrorType, ParserResult},
+        parser::tokenizer::Tokenizer,
     };
     fn parse_expr<S: AsRef<str>>(source: S) -> ParserResult<AstNode> {
         let tokens = Tokenizer::new(source.as_ref())

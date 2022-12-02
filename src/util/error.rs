@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    fmt::{Debug, Display, Formatter},
+    fmt::{Debug, Display},
 };
 
 use owo_colors::OwoColorize;

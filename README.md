@@ -16,3 +16,8 @@ Escuro is a small scripting language written in Rust, designed for performance, 
 ## Name
 
 Pronounced es ku ru.
+
+## todo
+
+-   [ ] implement panic mode and proper errors in parser
+-   [ ] implement hashmaps

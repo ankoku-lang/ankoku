@@ -5,7 +5,7 @@ use std::{
 
 use once_cell::unsync::OnceCell;
 
-use crate::error::EscuroError;
+use crate::util::error::EscuroError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenType {
@@ -256,7 +256,7 @@ impl Tokenizer {
     fn idx_to_pos(&self, idx: usize) -> (u32, usize) {
         let mut chars = 0;
         let mut lines = 0;
-        for i in 0..idx {
+        for _i in 0..idx {
             let mut j = 0;
             while self.source[j] != '\n' {
                 j += 1;
@@ -409,7 +409,7 @@ impl Iterator for Tokenizer {
 }
 #[cfg(test)]
 mod tests {
-    use crate::tokenizer::TokenType;
+    use crate::parser::tokenizer::TokenType;
 
     use super::Tokenizer;
 

@@ -1,4 +1,5 @@
-pub mod ast;
-pub mod error;
+pub mod compiler;
 pub mod parser;
-pub mod tokenizer;
+pub mod vm;
+
+pub mod util;
