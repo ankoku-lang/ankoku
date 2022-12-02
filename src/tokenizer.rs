@@ -57,14 +57,24 @@ pub struct TokenizerError {
     pub kind: TokenizerErrorType,
     pub line: String,
     pub line_num: u32,
+    pub col: usize,
+    pub length: usize,
 }
 impl TokenizerError {
-    pub fn new(kind: TokenizerErrorType, line: String, line_num: u32) -> Self {
-        assert!(line_num >= 1, "line numbers start at 1");
+    pub fn new(
+        kind: TokenizerErrorType,
+        line: String,
+        line_col: (u32, usize),
+        length: usize,
+    ) -> Self {
+        assert!(line_col.0 >= 1, "line numbers start at 1");
+        assert!(line_col.1 >= 1, "column numbers start at 1");
         TokenizerError {
             kind,
             line,
-            line_num,
+            line_num: line_col.0,
+            col: line_col.1,
+            length,
         }
     }
 }
@@ -92,8 +102,8 @@ impl EscuroError for TokenizerError {
         }
     }
 
-    fn line(&self) -> Option<(u32, &str)> {
-        Some((self.line_num, &self.line))
+    fn line_col(&self) -> Option<(u32, usize, &str)> {
+        Some((self.line_num, self.col, &self.line))
     }
 
     fn filename(&self) -> Option<&str> {
@@ -102,9 +112,13 @@ impl EscuroError for TokenizerError {
 
     fn code(&self) -> u32 {
         match self.kind {
-            TokenizerErrorType::UnexpectedCharacter => 1000,
-            TokenizerErrorType::UnterminatedString => 1001,
+            TokenizerErrorType::UnexpectedCharacter => 1001,
+            TokenizerErrorType::UnterminatedString => 1002,
         }
+    }
+
+    fn length(&self) -> Option<usize> {
+        Some(self.length)
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -225,11 +239,7 @@ impl Tokenizer {
             _ => {}
         }
 
-        Err(TokenizerError::new(
-            TokenizerErrorType::UnexpectedCharacter,
-            self.get_line(self.line),
-            self.line,
-        ))
+        Err(self.new_err(TokenizerErrorType::UnexpectedCharacter))
     }
     fn get_line(&self, line_num: u32) -> String {
         assert!(line_num >= 1);
@@ -243,6 +253,29 @@ impl Tokenizer {
             .expect("failed to get line")
             .to_string()
     }
+    fn idx_to_pos(&self, idx: usize) -> (u32, usize) {
+        let mut chars = 0;
+        let mut lines = 0;
+        for i in 0..idx {
+            let mut j = 0;
+            while self.source[j] != '\n' {
+                j += 1;
+            }
+            chars += j;
+            lines += 1;
+        }
+        (lines + 1, (chars - idx) + 1)
+    }
+
+    fn new_err(&self, kind: TokenizerErrorType) -> TokenizerError {
+        TokenizerError::new(
+            kind,
+            self.get_line(self.idx_to_pos(self.start).0),
+            self.idx_to_pos(self.start),
+            self.current - self.start,
+        )
+    }
+
     fn number(&mut self) -> Token {
         while self.peek().map_or(false, |v| v.is_ascii_digit()) {
             self.advance();
@@ -264,11 +297,7 @@ impl Tokenizer {
             self.advance();
         }
         if self.at_end() {
-            return Err(TokenizerError::new(
-                TokenizerErrorType::UnterminatedString,
-                self.get_line(self.line),
-                self.line,
-            ));
+            return Err(self.new_err(TokenizerErrorType::UnterminatedString));
         }
         self.advance();
         Ok(self.new_token(TokenType::String))

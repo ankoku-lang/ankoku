@@ -52,11 +52,15 @@ impl EscuroError for ParserError {
         }
     }
 
-    fn line(&self) -> Option<(u32, &str)> {
+    fn line_col(&self) -> Option<(u32, usize, &str)> {
         None
     }
 
     fn filename(&self) -> Option<&str> {
+        None
+    }
+
+    fn length(&self) -> Option<usize> {
         None
     }
 }

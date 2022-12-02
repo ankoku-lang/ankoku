@@ -8,7 +8,8 @@ use owo_colors::OwoColorize;
 pub trait EscuroError: Clone + Error + Debug + Display {
     fn msg(&self) -> &str;
     fn code(&self) -> u32;
-    fn line(&self) -> Option<(u32, &str)>;
+    fn line_col(&self) -> Option<(u32, usize, &str)>;
+    fn length(&self) -> Option<usize>;
     fn filename(&self) -> Option<&str>;
 }
 
@@ -20,51 +21,48 @@ pub struct CLIErrorReporter;
 
 impl ErrorReporter for CLIErrorReporter {
     fn report<E: EscuroError>(&self, err: E) {
-        if let Some((n, l)) = err.line() {
+        if let Some((line, col, content)) = err.line_col() {
             println!(
                 "{} {:04}: {}",
                 "error".bright_red().bold(),
                 format!("ESC{}", err.code()).bold(),
                 err.msg()
             );
-            println!("{} todo filename", "-->".bold().bright_cyan());
+            // println!("{} todo filename", "-->".bold().bright_cyan());
 
+            let bottom_highlight = || {
+                format!(
+                    "{}{}",
+                    " ".repeat(col - 1),
+                    "^".repeat(err.length().unwrap_or(1)).bold().yellow(),
+                )
+            };
             // 4 digits ought to be enough for anyone
-            if n < 100 {
+            if line < 100 {
                 println!("{}", "    |".bold().bright_cyan());
-                println!("{} {}", format!(" {:02} |", n).bold().bright_cyan(), l);
-                println!("{}", "    |".bold().bright_cyan());
-            } else if n < 1000 {
+                println!(
+                    "{} {}",
+                    format!(" {:2} |", line).bold().bright_cyan(),
+                    content
+                );
+                println!("{} {}", "    |".bold().bright_cyan(), bottom_highlight());
+            } else if line < 1000 {
                 println!("{}", "     |".bold().bright_cyan());
-                println!("{} {}", format!(" {:03} |", n).bold().bright_cyan(), l);
-                println!("{}", "     |".bold().bright_cyan());
-            } else if n < 10000 {
+                println!(
+                    "{} {}",
+                    format!(" {:3} |", line).bold().bright_cyan(),
+                    content
+                );
+                println!("{} {}", "     |".bold().bright_cyan(), bottom_highlight());
+            } else if line < 10000 {
                 println!("{}", "      |".bold().bright_cyan());
-                println!("{} {}", format!(" {:04} |", n).bold().bright_cyan(), l);
-                println!("{}", "      |".bold().bright_cyan());
+                println!(
+                    "{} {}",
+                    format!(" {:4} |", line).bold().bright_cyan(),
+                    content
+                );
+                println!("{} {}", "      |".bold().bright_cyan(), bottom_highlight());
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::tokenizer::{TokenizerError, TokenizerErrorType};
-
-    use super::{CLIErrorReporter, ErrorReporter};
-    fn get_reporter() -> impl ErrorReporter {
-        CLIErrorReporter
-    }
-    #[test]
-    fn err_report() {
-        let err = TokenizerError::new(
-            TokenizerErrorType::UnexpectedCharacter,
-            "some text".into(),
-            1,
-        );
-
-        let reporter = get_reporter();
-
-        reporter.report(err);
     }
 }
