@@ -5,7 +5,7 @@ use std::{
 
 use once_cell::unsync::OnceCell;
 
-use crate::util::error::EscuroError;
+use crate::util::error::AnkokuError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenType {
@@ -94,7 +94,7 @@ pub enum TokenizerErrorType {
     UnexpectedCharacter,
     UnterminatedString,
 }
-impl EscuroError for TokenizerError {
+impl AnkokuError for TokenizerError {
     fn msg(&self) -> &str {
         match self.kind {
             TokenizerErrorType::UnexpectedCharacter => "unexpected character",

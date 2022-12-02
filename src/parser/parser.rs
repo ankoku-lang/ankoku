@@ -6,7 +6,7 @@ use std::{
 use crate::{
     parser::ast::{AstNode, AstType},
     parser::tokenizer::{Token, TokenType},
-    util::error::EscuroError,
+    util::error::AnkokuError,
 };
 pub type ParserResult<T> = Result<T, ParserError>;
 #[derive(Clone)]
@@ -36,7 +36,7 @@ pub enum ParserErrorType {
     UnclosedParentheses,
     FailedToMatchAnyRules,
 }
-impl EscuroError for ParserError {
+impl AnkokuError for ParserError {
     fn msg(&self) -> &str {
         match self.kind {
             ParserErrorType::RealParseFailed => "parsing real failed",

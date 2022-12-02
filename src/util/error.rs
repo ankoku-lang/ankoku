@@ -5,7 +5,7 @@ use std::{
 
 use owo_colors::OwoColorize;
 
-pub trait EscuroError: Clone + Error + Debug + Display {
+pub trait AnkokuError: Clone + Error + Debug + Display {
     fn msg(&self) -> &str;
     fn code(&self) -> u32;
     fn line_col(&self) -> Option<(u32, usize, &str)>;
@@ -14,13 +14,13 @@ pub trait EscuroError: Clone + Error + Debug + Display {
 }
 
 pub trait ErrorReporter {
-    fn report<E: EscuroError>(&self, err: E);
+    fn report<E: AnkokuError>(&self, err: E);
 }
 
 pub struct CLIErrorReporter;
 
 impl ErrorReporter for CLIErrorReporter {
-    fn report<E: EscuroError>(&self, err: E) {
+    fn report<E: AnkokuError>(&self, err: E) {
         if let Some((line, col, content)) = err.line_col() {
             println!(
                 "{} {:04}: {}",
