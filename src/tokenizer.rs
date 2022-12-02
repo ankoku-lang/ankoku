@@ -1,4 +1,13 @@
-#[derive(Clone, Debug, PartialEq, Eq)]
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
+};
+
+use once_cell::unsync::OnceCell;
+
+use crate::error::EscuroError;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenType {
     LParen,
     RParen,
@@ -23,9 +32,9 @@ pub enum TokenType {
     BitwiseOr,
     And,
     Or,
-    String(String),
-    Number(String),
-    Identifier(String),
+    String,
+    Number,
+    Identifier,
     Class,
     Else,
     False,
@@ -40,11 +49,65 @@ pub enum TokenType {
     True,
     Var,
     While,
-    Error(String),
     EOF,
 }
+pub type TokenizerResult<T> = Result<T, TokenizerError>;
+#[derive(Clone)]
+pub struct TokenizerError {
+    pub kind: TokenizerErrorType,
+    pub line: String,
+    pub line_num: u32,
+}
+impl TokenizerError {
+    pub fn new(kind: TokenizerErrorType, line: String, line_num: u32) -> Self {
+        assert!(line_num >= 1, "line numbers start at 1");
+        TokenizerError {
+            kind,
+            line,
+            line_num,
+        }
+    }
+}
+impl Error for TokenizerError {}
+impl Debug for TokenizerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.msg())
+    }
+}
+impl Display for TokenizerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.msg())
+    }
+}
+#[derive(Clone)]
+pub enum TokenizerErrorType {
+    UnexpectedCharacter,
+    UnterminatedString,
+}
+impl EscuroError for TokenizerError {
+    fn msg(&self) -> &str {
+        match self.kind {
+            TokenizerErrorType::UnexpectedCharacter => "unexpected character",
+            TokenizerErrorType::UnterminatedString => "unterminated string (missing closing \")",
+        }
+    }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+    fn line(&self) -> Option<(u32, &str)> {
+        Some((self.line_num, &self.line))
+    }
+
+    fn filename(&self) -> Option<&str> {
+        todo!()
+    }
+
+    fn code(&self) -> u32 {
+        match self.kind {
+            TokenizerErrorType::UnexpectedCharacter => 1000,
+            TokenizerErrorType::UnterminatedString => 1001,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Token {
     pub kind: TokenType,
     pub start: usize, // start character
@@ -64,11 +127,12 @@ impl Token {
 }
 
 pub struct Tokenizer {
-    source: Vec<char>,
+    pub(crate) source: Vec<char>,
     start: usize,
     current: usize,
     line: u32,
     done: bool,
+    source_string: OnceCell<String>,
 }
 impl Tokenizer {
     pub fn new(source: &str) -> Self {
@@ -78,73 +142,106 @@ impl Tokenizer {
             line: 1,
             start: 0,
             done: false,
+            source_string: OnceCell::new(),
         }
     }
     pub fn at_end(&self) -> bool {
         self.current >= self.source.len()
     }
-    pub fn next_token(&mut self) -> Token {
+    pub fn next_token(&mut self) -> TokenizerResult<Token> {
         self.skip_whitespace();
         self.start = self.current;
         if self.at_end() {
-            return self.new_token(TokenType::EOF);
+            return Ok(self.new_token(TokenType::EOF));
         }
         let c = self.advance();
+        if c.is_alphabetic() {
+            let kind = self.identifier();
+            return Ok(self.new_token(kind));
+        }
         let eqm = self.mtch('=');
-        println!("{}", c);
         match c {
-            '(' => return self.new_token(TokenType::LParen),
-            ')' => return self.new_token(TokenType::RParen),
-            '{' => return self.new_token(TokenType::LBrace),
-            '}' => return self.new_token(TokenType::RBrace),
-            ';' => return self.new_token(TokenType::Semicolon),
-            ',' => return self.new_token(TokenType::Dot),
-            '-' => return self.new_token(TokenType::Minus),
-            '+' => return self.new_token(TokenType::Plus),
+            '(' => return Ok(self.new_token(TokenType::LParen)),
+            ')' => return Ok(self.new_token(TokenType::RParen)),
+            '{' => return Ok(self.new_token(TokenType::LBrace)),
+            '}' => return Ok(self.new_token(TokenType::RBrace)),
+            ';' => return Ok(self.new_token(TokenType::Semicolon)),
+            ',' => return Ok(self.new_token(TokenType::Dot)),
+            '-' => return Ok(self.new_token(TokenType::Minus)),
+            '+' => return Ok(self.new_token(TokenType::Plus)),
             '/' => {
-                println!("slash");
-                return self.new_token(TokenType::Slash);
+                return Ok(self.new_token(TokenType::Slash));
             }
-            '*' => return self.new_token(TokenType::Star),
+            '*' => return Ok(self.new_token(TokenType::Star)),
             '!' => {
-                return self.new_token(if eqm {
+                return Ok(self.new_token(if eqm {
                     TokenType::BangEqual
                 } else {
                     TokenType::Bang
-                })
+                }))
             }
             '=' => {
-                return self.new_token(if eqm {
+                return Ok(self.new_token(if eqm {
                     TokenType::EqualEqual
                 } else {
                     TokenType::Equal
-                })
+                }))
             }
             '<' => {
-                return self.new_token(if eqm {
+                return Ok(self.new_token(if eqm {
                     TokenType::LessEqual
                 } else {
                     TokenType::Less
-                })
+                }))
             }
             '>' => {
-                return self.new_token(if eqm {
+                return Ok(self.new_token(if eqm {
                     TokenType::GreaterEqual
                 } else {
                     TokenType::Greater
-                })
+                }))
+            }
+            '&' => {
+                return Ok(self.new_token(if eqm {
+                    TokenType::And
+                } else {
+                    TokenType::BitwiseAnd
+                }))
+            }
+            '|' => {
+                return Ok(self.new_token(if eqm {
+                    TokenType::Or
+                } else {
+                    TokenType::BitwiseOr
+                }))
             }
             '"' => {
                 return self.string();
             }
-            'a'..='z' | 'A'..='Z' => {}
+
             '0'..='9' => {
-                return self.number();
+                return Ok(self.number());
             }
             _ => {}
         }
 
-        self.error_token("Unexpected character.")
+        Err(TokenizerError::new(
+            TokenizerErrorType::UnexpectedCharacter,
+            self.get_line(self.line),
+            self.line,
+        ))
+    }
+    fn get_line(&self, line_num: u32) -> String {
+        assert!(line_num >= 1);
+        let mut lines = self
+            .source_string
+            .get_or_init(|| String::from_iter(&self.source))
+            .lines();
+
+        lines
+            .nth((line_num - 1) as usize)
+            .expect("failed to get line")
+            .to_string()
     }
     fn number(&mut self) -> Token {
         while self.peek().map_or(false, |v| v.is_ascii_digit()) {
@@ -157,11 +254,9 @@ impl Tokenizer {
                 self.advance();
             }
         }
-        return self.new_token(TokenType::Number(
-            self.source[self.start..=self.current - 1].iter().collect(),
-        ));
+        self.new_token(TokenType::Number)
     }
-    fn string(&mut self) -> Token {
+    fn string(&mut self) -> TokenizerResult<Token> {
         while self.peek() != Some('"') && !self.at_end() {
             if self.peek() == Some('\n') {
                 self.line += 1;
@@ -169,22 +264,51 @@ impl Tokenizer {
             self.advance();
         }
         if self.at_end() {
-            return self.error_token("Unterminated string.");
+            return Err(TokenizerError::new(
+                TokenizerErrorType::UnterminatedString,
+                self.get_line(self.line),
+                self.line,
+            ));
         }
         self.advance();
-        return self.new_token(TokenType::String(
-            self.source[self.start + 1..=self.current - 2]
-                .iter()
-                .collect(),
-        ));
+        Ok(self.new_token(TokenType::String))
     }
+    fn identifier(&mut self) -> TokenType {
+        while self
+            .peek()
+            .map_or(false, |v| v.is_alphanumeric() || v == '_')
+        {
+            self.advance();
+        }
+
+        let ident = self.source[self.start..=self.current - 1]
+            .iter()
+            .collect::<String>();
+        match ident.as_str() {
+            "class" => TokenType::Class,
+            "else" => TokenType::Else,
+            "if" => TokenType::If,
+            "null" => TokenType::Null,
+            "print" => TokenType::Print,
+            "return" => TokenType::Return,
+            "super" => TokenType::Super,
+            "var" => TokenType::Var,
+            "while" => TokenType::While,
+            "false" => TokenType::False,
+            "for" => TokenType::For,
+            "fn" => TokenType::Fn,
+            "this" => TokenType::This,
+            "true" => TokenType::True,
+            _ => TokenType::Identifier,
+        }
+    }
+
     fn skip_whitespace(&mut self) {
         while self.peek().map_or(false, |v| v.is_whitespace() || v == '/') {
             if self.peek().unwrap() == '\n' {
                 self.line += 1;
             }
             if self.peek().unwrap() == '/' && self.peek_next() == Some('/') {
-                println!("comment {}", self.current);
                 while !self.peek().map_or(true, |v| v == '\n') {
                     self.advance();
                 }
@@ -234,25 +358,21 @@ impl Tokenizer {
             start: self.start,
         }
     }
-    fn error_token<A: Into<String>>(&self, msg: A) -> Token {
-        Token {
-            kind: TokenType::Error(msg.into()),
-            start: self.start,
-            length: 0,
-            line: self.line,
-        }
-    }
 }
 impl Iterator for Tokenizer {
-    type Item = Token;
+    type Item = TokenizerResult<Token>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.done {
             None
         } else {
             let x = self.next_token();
-            if x.kind == TokenType::EOF || matches!(x.kind, TokenType::Error(_)) {
-                self.done = true
+            if let Ok(e) = &x {
+                if e.kind == TokenType::EOF {
+                    self.done = true
+                }
+            } else {
+                self.done = true;
             }
             Some(x)
         }
@@ -264,19 +384,22 @@ mod tests {
 
     use super::Tokenizer;
 
+    fn tokenize_types<S: AsRef<str>>(s: S) -> Vec<TokenType> {
+        let tokenizer = Tokenizer::new(s.as_ref());
+
+        tokenizer.map(|v| v.unwrap().kind).collect::<Vec<_>>()
+    }
+
     #[test]
     fn empty() {
-        let tokenizer = Tokenizer::new("");
-        let tokens = tokenizer.map(|v| v.kind).collect::<Vec<_>>();
+        let tokens = tokenize_types("");
 
         assert_eq!(tokens, vec![TokenType::EOF]);
     }
 
     #[test]
     fn punctuation() {
-        let tokenizer = Tokenizer::new("+ - * / // comment vs. slash");
-        let tokens = tokenizer.map(|v| v.kind).collect::<Vec<_>>();
-        println!("{:?}", tokens);
+        let tokens = tokenize_types("+ - * / // comment vs. slash");
         assert_eq!(
             tokens,
             vec![
@@ -291,24 +414,29 @@ mod tests {
 
     #[test]
     fn strings() {
-        let tokenizer = Tokenizer::new("\"hello world\"");
-        let tokens = tokenizer.map(|v| v.kind).collect::<Vec<_>>();
-        println!("{:?}", tokens);
-        assert_eq!(
-            tokens,
-            vec![TokenType::String("hello world".into()), TokenType::EOF]
-        );
+        let tokens = tokenize_types("\"hello world\"");
+        assert_eq!(tokens, vec![TokenType::String, TokenType::EOF]);
     }
     #[test]
     fn numbers() {
-        let tokenizer = Tokenizer::new("1000 500.5");
-        let tokens = tokenizer.map(|v| v.kind).collect::<Vec<_>>();
-        println!("{:?}", tokens);
+        let tokens = tokenize_types("100.3");
+        assert_eq!(tokens, vec![TokenType::Number, TokenType::EOF]);
+    }
+    #[test]
+    fn identifiers() {
+        let tokens = tokenize_types("hello_world");
+        assert_eq!(tokens, vec![TokenType::Identifier, TokenType::EOF]);
+    }
+    #[test]
+    fn keywords() {
+        let tokens = tokenize_types("class if true");
+
         assert_eq!(
             tokens,
             vec![
-                TokenType::Number("1000".into()),
-                TokenType::Number("500.5".into()),
+                TokenType::Class,
+                TokenType::If,
+                TokenType::True,
                 TokenType::EOF
             ]
         );
