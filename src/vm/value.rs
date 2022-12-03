@@ -1,38 +1,99 @@
-use std::{
-    fmt::Debug,
-    ops::{Add, Div, Mul, Neg, Not, Sub},
-};
+use std::fmt::Debug;
 
-use super::obj::Obj;
+use super::{
+    gc::{Gc, GcRef},
+    obj::ObjType,
+};
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
     Bool(bool),
     Null,
     Real(f64),
-    Obj(Obj),
+    Obj(GcRef),
 }
 
 impl Value {
     /// Try to convert this into a real (f64).
-    pub fn coerce_real(&self) -> f64 {
+    pub fn coerce_real(self) -> f64 {
         match self {
             Value::Bool(v) => {
-                if *v {
+                if v {
                     1.0
                 } else {
                     0.0
                 }
             }
-            Value::Real(v) => *v,
+            Value::Real(v) => v,
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
 
-    pub fn coerce_bool(&self) -> bool {
+    pub fn coerce_bool(self) -> bool {
         match self {
-            Value::Bool(v) => *v,
-            Value::Real(v) => *v != 0.0,
+            Value::Bool(v) => v,
+            Value::Real(v) => v != 0.0,
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+
+    pub fn coerce_str(self) -> String {
+        match self {
+            Value::Bool(v) => {
+                if v {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }
+            }
+            Value::Real(v) => v.to_string(),
+            Value::Obj(o) => match &o.inner().kind {
+                ObjType::String(v) => v.clone().into_inner(),
+            },
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+
+    pub fn add(self, rhs: Value, gc: &Gc) -> Value {
+        match self {
+            Value::Real(l) => (l + rhs.coerce_real()).into(),
+            Value::Obj(gcref) => match &gcref.kind {
+                super::obj::ObjType::String(self_string) => {
+                    Value::Obj(gc.alloc(self_string.concat(&rhs.coerce_str()).into()))
+                }
+            },
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+
+    pub fn sub(self, rhs: Value, _gc: &Gc) -> Value {
+        match self {
+            Value::Real(l) => (l - rhs.coerce_real()).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+
+    pub fn mul(self, rhs: Value, _gc: &Gc) -> Value {
+        match self {
+            Value::Real(l) => (l * rhs.coerce_real()).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+    pub fn div(self, rhs: Value, _gc: &Gc) -> Value {
+        match self {
+            Value::Real(l) => (l / rhs.coerce_real()).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+    pub fn neg(self, _gc: &Gc) -> Value {
+        match self {
+            Value::Real(l) => (-l).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+    pub fn not(self, _gc: &Gc) -> Value {
+        match self {
+            Value::Bool(l) => (!l).into(),
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
@@ -57,68 +118,5 @@ impl From<f64> for Value {
 impl From<bool> for Value {
     fn from(v: bool) -> Self {
         Value::Bool(v)
-    }
-}
-
-impl Add<Value> for Value {
-    type Output = Value;
-
-    fn add(self, rhs: Value) -> Self::Output {
-        match self {
-            Value::Real(l) => (l + rhs.coerce_real()).into(),
-            _ => todo!("implement proper type errors here instead of panics"),
-        }
-    }
-}
-impl Sub<Value> for Value {
-    type Output = Value;
-
-    fn sub(self, rhs: Value) -> Self::Output {
-        match self {
-            Value::Real(l) => (l - rhs.coerce_real()).into(),
-            _ => todo!("implement proper type errors here instead of panics"),
-        }
-    }
-}
-
-impl Mul<Value> for Value {
-    type Output = Value;
-
-    fn mul(self, rhs: Value) -> Self::Output {
-        match self {
-            Value::Real(l) => (l * rhs.coerce_real()).into(),
-            _ => todo!("implement proper type errors here instead of panics"),
-        }
-    }
-}
-
-impl Div<Value> for Value {
-    type Output = Value;
-
-    fn div(self, rhs: Value) -> Self::Output {
-        match self {
-            Value::Real(l) => (l / rhs.coerce_real()).into(),
-            _ => todo!("implement proper type errors here instead of panics"),
-        }
-    }
-}
-impl Neg for Value {
-    type Output = Value;
-
-    fn neg(self) -> Self::Output {
-        match self {
-            Value::Real(l) => (-l).into(),
-            _ => todo!("implement proper type errors here instead of panics"),
-        }
-    }
-}
-impl Not for Value {
-    type Output = Value;
-
-    fn not(self) -> Self::Output {
-        match self {
-            Value::Bool(a) => (!a).into(),
-            _ => todo!("implement proper type errors here instead of panics"),
-        }
     }
 }

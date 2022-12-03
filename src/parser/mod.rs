@@ -84,7 +84,13 @@ impl Parser {
         }
     }
     pub fn expression(&mut self) -> ParserResult<AstNode> {
-        self.equality()
+        match self.equality() {
+            Ok(a) => Ok(a),
+            Err(err) => {
+                self.panic_mode = true;
+                Err(err)
+            }
+        }
     }
 
     pub fn equality(&mut self) -> ParserResult<AstNode> {

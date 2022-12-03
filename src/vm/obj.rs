@@ -1,11 +1,25 @@
-use std::hash::Hasher;
+use std::{hash::Hasher, ptr::NonNull};
 
 use crate::util::fxhash::FxHasher;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Obj {
     pub kind: ObjType,
+    pub(crate) next: Option<NonNull<Obj>>,
 }
+
+impl Obj {
+    pub fn new(kind: ObjType) -> Self {
+        Self { kind, next: None }
+    }
+}
+
+impl From<AnkokuString> for Obj {
+    fn from(v: AnkokuString) -> Self {
+        Obj::new(ObjType::String(v))
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum ObjType {
     String(AnkokuString),
@@ -52,26 +66,3 @@ impl PartialEq for AnkokuString {
     }
 }
 impl Eq for AnkokuString {}
-
-#[cfg(test)]
-mod tests {
-    use super::AnkokuString;
-
-    #[test]
-    fn hashes() {
-        let s = "Hello world";
-        let s = AnkokuString::new(s.to_string());
-
-        let b = "Hello world";
-        let b = AnkokuString::new(b.to_string());
-        assert_eq!(s.hash, b.hash);
-        assert_eq!(s, b);
-    }
-
-    #[test]
-    fn naughty_strings() {
-        for ns in naughty_strings::BLNS {
-            println!("{}", ns);
-        }
-    }
-}

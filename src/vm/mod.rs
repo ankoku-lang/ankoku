@@ -1,12 +1,14 @@
-use self::{chunk::Chunk, value::Value};
+use self::{chunk::Chunk, gc::Gc, value::Value};
 
 pub mod chunk;
+mod gc;
 pub mod instruction;
 pub mod obj;
 pub mod value;
 
 pub struct VM<'a> {
     chunk: &'a Chunk,
+    gc: Gc,
     ip: usize,
     stack: Vec<Value>,
 }
@@ -15,6 +17,7 @@ impl VM<'_> {
     pub fn interpret(chunk: &Chunk) -> (InterpretResult, VM) {
         let mut vm = VM {
             chunk,
+            gc: Gc::new(),
             ip: 0,
             stack: Vec::with_capacity(128),
         };
@@ -46,21 +49,6 @@ impl VM<'_> {
             };
         }
 
-        macro_rules! binop {
-			($t:tt) => {
-				let b = self.stack_pop();
-				let a = self.stack_pop();
-				self.stack_push(a $t b);
-			};
-		}
-
-        macro_rules! unop {
-			($t:tt) => {
-				let a = self.stack_pop();
-				self.stack_push($t a);
-			};
-		}
-
         loop {
             #[cfg(feature = "debug-mode")]
             {
@@ -81,33 +69,41 @@ impl VM<'_> {
                 // Constant
                 2 => {
                     let constant = read_constant!();
-                    println!("{:?}", constant);
                     self.stack_push(constant);
                 }
                 // Negate
                 3 => {
                     let v = self.stack_pop();
-                    self.stack_push(-v);
+                    self.stack_push(v.neg(&self.gc));
                 }
                 // Add
                 4 => {
-                    binop!(+);
+                    let b = self.stack_pop();
+                    let a = self.stack_pop();
+                    self.stack_push(a.add(b, &self.gc));
                 }
                 // Sub
                 5 => {
-                    binop!(-);
+                    let b = self.stack_pop();
+                    let a = self.stack_pop();
+                    self.stack_push(a.sub(b, &self.gc));
                 }
                 // Mul
                 6 => {
-                    binop!(*);
+                    let b = self.stack_pop();
+                    let a = self.stack_pop();
+                    self.stack_push(a.mul(b, &self.gc));
                 }
                 // Div
                 7 => {
-                    binop!(/);
+                    let b = self.stack_pop();
+                    let a = self.stack_pop();
+                    self.stack_push(a.div(b, &self.gc));
                 }
                 // Not
                 8 => {
-                    unop!(!);
+                    let a = self.stack_pop();
+                    self.stack_push(a.not(&self.gc));
                 }
                 _ => unimplemented!(),
             }
