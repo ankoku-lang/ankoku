@@ -1,4 +1,4 @@
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chunk {
     pub code: Vec<u8>,
 }
@@ -29,7 +29,6 @@ mod tests {
     fn basic() {
         let mut chunk = Chunk::new();
         chunk.write(Instruction::Return.into());
-        println!("{:?}", chunk);
-        assert!(false)
+        assert_eq!(chunk.code, vec![1]);
     }
 }
