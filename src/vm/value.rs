@@ -1,13 +1,16 @@
 use std::{
     fmt::Debug,
-    ops::{Add, Div, Mul, Neg, Sub},
+    ops::{Add, Div, Mul, Neg, Not, Sub},
 };
+
+use super::obj::Obj;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
     Bool(bool),
     Null,
     Real(f64),
+    Obj(Obj),
 }
 
 impl Value {
@@ -41,12 +44,19 @@ impl Debug for Value {
             Self::Bool(b) => write!(f, "{}", b),
             Self::Null => write!(f, "null"),
             Self::Real(n) => write!(f, "{}", n),
+            Self::Obj(a) => write!(f, "{:?}", a),
         }
     }
 }
 impl From<f64> for Value {
     fn from(v: f64) -> Self {
         Value::Real(v)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Value::Bool(v)
     }
 }
 
@@ -98,6 +108,16 @@ impl Neg for Value {
     fn neg(self) -> Self::Output {
         match self {
             Value::Real(l) => (-l).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+}
+impl Not for Value {
+    type Output = Value;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Value::Bool(a) => (!a).into(),
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }

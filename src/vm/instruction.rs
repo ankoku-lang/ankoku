@@ -10,4 +10,5 @@ pub enum Instruction {
     Sub = 5,
     Mul = 6,
     Div = 7,
+    Not = 8,
 }

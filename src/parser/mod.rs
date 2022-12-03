@@ -194,6 +194,7 @@ impl Parser {
     fn unop(&self, op: Token, inner: AstNode) -> AstNode {
         match op.kind {
             TokenType::Minus => AstNode::new(op, AstType::Negate(Box::new(inner))),
+            TokenType::Bang => AstNode::new(op, AstType::Not(Box::new(inner))),
             _ => unimplemented!(),
         }
     }

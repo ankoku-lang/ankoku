@@ -59,6 +59,11 @@ impl AstVisitor<()> for Compiler {
 
                 write_byte!(Instruction::Negate.into());
             }
+            AstType::Not(i) => {
+                self.visit_node(i);
+
+                write_byte!(Instruction::Not.into());
+            }
             AstType::Grouping(b) => {
                 self.visit_node(b);
             }
@@ -91,7 +96,7 @@ mod tests {
         let mut compiled = Compiler::compile(&expr);
         compiled.disassemble("compiled");
         compiled.write(Instruction::Return.into(), 1);
-        let (result, mut vm) = VM::interpret(&compiled);
+        let (result, _vm) = VM::interpret(&compiled);
         assert_eq!(result, InterpretResult::Ok(Value::Real(7.8)));
     }
 }

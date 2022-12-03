@@ -43,7 +43,8 @@ impl Chunk {
             | Instruction::Add
             | Instruction::Sub
             | Instruction::Mul
-            | Instruction::Div => {
+            | Instruction::Div
+            | Instruction::Not => {
                 println!("{:?}", instruction);
                 offset + 1
             }

@@ -18,6 +18,7 @@ pub enum AstType {
     Divide(Box<AstNode>, Box<AstNode>),
     // Unary operations
     Negate(Box<AstNode>),
+    Not(Box<AstNode>),
     // Other
     Grouping(Box<AstNode>),
 }
@@ -49,6 +50,7 @@ impl Display for AstNode {
             AstType::Multiply(l, r) => write!(f, "(* {} {})", l, r),
             AstType::Divide(l, r) => write!(f, "(/ {} {})", l, r),
             AstType::Negate(inner) => write!(f, "(- {})", inner),
+            AstType::Not(inner) => write!(f, "(! {})", inner),
             AstType::Grouping(inner) => write!(f, "{}", inner),
         }
     }

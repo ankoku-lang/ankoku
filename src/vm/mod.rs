@@ -2,6 +2,7 @@ use self::{chunk::Chunk, value::Value};
 
 pub mod chunk;
 pub mod instruction;
+pub mod obj;
 pub mod value;
 
 pub struct VM<'a> {
@@ -53,6 +54,13 @@ impl VM<'_> {
 			};
 		}
 
+        macro_rules! unop {
+			($t:tt) => {
+				let a = self.stack_pop();
+				self.stack_push($t a);
+			};
+		}
+
         loop {
             #[cfg(feature = "debug-mode")]
             {
@@ -96,6 +104,10 @@ impl VM<'_> {
                 // Div
                 7 => {
                     binop!(/);
+                }
+                // Not
+                8 => {
+                    unop!(!);
                 }
                 _ => unimplemented!(),
             }
