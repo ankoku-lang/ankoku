@@ -25,7 +25,7 @@ impl ParserError {
 impl Error for ParserError {}
 impl Debug for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg())
+        write!(f, "{} on {:?}", self.msg(), self.token)
     }
 }
 impl Display for ParserError {
@@ -131,7 +131,7 @@ impl Parser {
         Ok(e)
     }
     pub fn unary(&mut self) -> ParserResult<AstNode> {
-        if self.mtch(&[TokenType::Bang, TokenType::Star]) {
+        if self.mtch(&[TokenType::Bang, TokenType::Minus]) {
             let op = self.prev();
             let inner = self.unary()?;
             return Ok(self.unop(op, inner));

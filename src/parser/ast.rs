@@ -54,6 +54,10 @@ impl Display for AstNode {
     }
 }
 
+pub trait AstVisitor<T> {
+    fn visit_node(&mut self, node: &AstNode) -> T;
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{

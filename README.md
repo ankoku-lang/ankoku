@@ -1,6 +1,6 @@
 # ankoku
 
-Ankoku is a small scripting language written in Rust, designed for performance, expressiveness, and ease of embedding. Right now it's like clox in Rust with an AST-based frontend.
+Ankoku is a small scripting language written in Rust, designed for performance, expressiveness, and ease of embedding.
 
 ## Features
 
@@ -15,12 +15,12 @@ Ankoku is a small scripting language written in Rust, designed for performance, 
 
 ## Name
 
-Pronounced es ku ru.
+Pronounced an ko ku. Japanese for "darkness", because the language is emo.
 
 ## todo
 
 -   [x] implement chunks
--   [ ] implement start of bytecode interpreter
+-   [x] implement start of bytecode interpreter
 -   [ ] implement hashmaps
 
 ### parsing
@@ -30,4 +30,4 @@ Pronounced es ku ru.
 
 ### chores
 
--   [ ] switch to github flow branching
+-   [ ] switch to github flow branching and protect `master`
