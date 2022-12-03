@@ -17,6 +17,6 @@ fn main() {
     let mut compiled = Compiler::compile(&ast);
     compiled.disassemble("compiled");
     compiled.write(Instruction::Return.into(), 1);
-
-    VM::interpret(&compiled);
+    let mut vm = VM::new();
+    vm.interpret(compiled);
 }

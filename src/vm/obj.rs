@@ -6,11 +6,23 @@ use crate::util::fxhash::FxHasher;
 pub struct Obj {
     pub kind: ObjType,
     pub(crate) next: Option<NonNull<Obj>>,
+    pub(crate) marked: bool,
 }
 
 impl Obj {
     pub fn new(kind: ObjType) -> Self {
-        Self { kind, next: None }
+        Self {
+            kind,
+            next: None,
+            marked: false,
+        }
+    }
+}
+
+impl Drop for Obj {
+    fn drop(&mut self) {
+        #[cfg(feature = "gc-debug-super-slow")]
+        println!("{:?} dropped", self);
     }
 }
 
@@ -34,11 +46,17 @@ pub struct AnkokuString {
 impl AnkokuString {
     pub fn new(str: String) -> Self {
         AnkokuString {
-            hash: AnkokuString::hash(str.as_bytes()),
+            hash: AnkokuString::hash_bytes(str.as_bytes()),
             inner: str,
         }
     }
-    fn hash(bytes: &[u8]) -> usize {
+
+    #[inline(always)]
+    pub fn hash(&self) -> usize {
+        self.hash
+    }
+
+    fn hash_bytes(bytes: &[u8]) -> usize {
         let mut f = FxHasher::default();
 
         f.write(bytes);

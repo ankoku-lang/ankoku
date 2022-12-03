@@ -1,9 +1,6 @@
 use std::fmt::Debug;
 
-use super::{
-    gc::{Gc, GcRef},
-    obj::ObjType,
-};
+use super::{obj::ObjType, GcRef, VM};
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
@@ -54,7 +51,7 @@ impl Value {
         }
     }
 
-    pub fn add(self, rhs: Value, gc: &Gc) -> Value {
+    pub fn add(self, rhs: Value, gc: &VM) -> Value {
         match self {
             Value::Real(l) => (l + rhs.coerce_real()).into(),
             Value::Obj(gcref) => match &gcref.kind {
@@ -66,32 +63,32 @@ impl Value {
         }
     }
 
-    pub fn sub(self, rhs: Value, _gc: &Gc) -> Value {
+    pub fn sub(self, rhs: Value, _gc: &VM) -> Value {
         match self {
             Value::Real(l) => (l - rhs.coerce_real()).into(),
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
 
-    pub fn mul(self, rhs: Value, _gc: &Gc) -> Value {
+    pub fn mul(self, rhs: Value, _gc: &VM) -> Value {
         match self {
             Value::Real(l) => (l * rhs.coerce_real()).into(),
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
-    pub fn div(self, rhs: Value, _gc: &Gc) -> Value {
+    pub fn div(self, rhs: Value, _gc: &VM) -> Value {
         match self {
             Value::Real(l) => (l / rhs.coerce_real()).into(),
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
-    pub fn neg(self, _gc: &Gc) -> Value {
+    pub fn neg(self, _gc: &VM) -> Value {
         match self {
             Value::Real(l) => (-l).into(),
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
-    pub fn not(self, _gc: &Gc) -> Value {
+    pub fn not(self, _gc: &VM) -> Value {
         match self {
             Value::Bool(l) => (!l).into(),
             _ => todo!("implement proper type errors here instead of panics"),

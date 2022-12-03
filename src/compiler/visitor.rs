@@ -96,7 +96,8 @@ mod tests {
         let mut compiled = Compiler::compile(&expr);
         compiled.disassemble("compiled");
         compiled.write(Instruction::Return.into(), 1);
-        let (result, _vm) = VM::interpret(&compiled);
+        let mut vm = VM::new();
+        let result = vm.interpret(compiled);
         assert_eq!(result, InterpretResult::Ok(Value::Real(7.8)));
     }
 }
