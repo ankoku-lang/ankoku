@@ -1,12 +1,14 @@
-use std::process::exit;
-
-use ankoku::{
-    compiler::Compiler,
-    parser::{expr::Expr, stmt::Stmt, tokenizer::Tokenizer},
-    vm::{instruction::Instruction, VM},
-};
-
+#[cfg(feature = "cli")]
 fn main() {
+    use std::process::exit;
+
+    use ankoku::{
+        compiler::Compiler,
+        parser::{stmt::Stmt, tokenizer::Tokenizer},
+        util::error::{cli::CLIErrorReporter, ErrorReporter},
+        vm::{instruction::Instruction, VM},
+    };
+
     let args = std::env::args().collect::<Vec<_>>();
     if args.len() < 2 {
         println!("usage: ankoku <file.ak>");
@@ -19,10 +21,19 @@ fn main() {
         .map(|v| v.unwrap())
         .collect::<Vec<_>>();
 
-    let ast = Stmt::parse(tokens, source.chars().collect()).expect("parse error");
+    let (ast, errors) = Stmt::parse(tokens, source.chars().collect());
+    if !errors.is_empty() {
+        let reporter = CLIErrorReporter;
+        for err in errors {
+            reporter.report(err);
+        }
+    }
     let mut vm = VM::new();
     let mut compiled = Compiler::compile(&ast, &vm);
     compiled.disassemble("compiled");
     compiled.write(Instruction::Return.into(), 1);
     vm.interpret(compiled);
 }
+
+#[cfg(not(feature = "cli"))]
+fn main() {}

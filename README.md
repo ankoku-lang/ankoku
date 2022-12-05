@@ -17,19 +17,23 @@ Ankoku is a small scripting language written in Rust, designed for performance, 
 
 ## Name
 
-Pronounced an ko ku. Japanese for "darkness", because the language is emo.
+[Pronounced](https://translate.google.com/?sl=ja&tl=en&text=ankoku&op=translate) aan ko ku. If you can read IPA it's ã̠ŋko̞kɯ̟ᵝ, but nobody can read random Unicode. Japanese for "darkness", because the language is emo.
+
+## MSRV
+
+Currently 1.65.0 because of using std::backtrace::Backtrace, which was [recently stabilized](https://github.com/rust-lang/rust/pull/99573), however this could be fixed by using the backtrace crate.
 
 ## todo
 
 -   [x] implement chunks
 -   [x] implement start of bytecode interpreter
--   [ ] implement hashmaps
+-   [x] implement hashmaps
 
 ### parsing
 
--   [ ] implement panic mode and proper errors in parser
+-   [x] implement panic mode and proper errors in parser
 -   [ ] fix error handling to not suck
 
 ### chores
 
--   [ ] switch to github flow branching and protect `master`
+-   [x] switch to github flow branching and protect `master`

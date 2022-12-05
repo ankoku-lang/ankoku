@@ -1,4 +1,5 @@
 use std::{
+    backtrace::Backtrace,
     cell::{Cell, RefCell},
     ops::{Deref, DerefMut},
     ptr::{drop_in_place, NonNull},
@@ -8,11 +9,14 @@ use crate::vm::obj::Object;
 
 use self::{
     chunk::Chunk,
+    error::{RuntimeError, RuntimeErrorType, RuntimeType, TypeErrorType},
     obj::{Obj, ObjType},
+    table::HashTable,
     value::Value,
 };
 
 pub mod chunk;
+mod error;
 mod gc;
 pub mod instruction;
 pub mod obj;
@@ -25,6 +29,7 @@ pub struct VM {
     stack: Vec<Value>,
     objects: Cell<Option<NonNull<Obj>>>, // Option<NonNull<T>> is the same size as *mut T where None is a nullptr, this is just safer (not by much; this code still does raw pointer manipulation)
     grey_stack: RefCell<Vec<GcRef>>,
+    globals: HashTable,
 }
 
 impl VM {
@@ -35,6 +40,7 @@ impl VM {
             stack: Vec::with_capacity(128),
             objects: Cell::new(None),
             grey_stack: RefCell::new(Vec::new()),
+            globals: HashTable::new(),
         }
     }
     pub fn interpret(&mut self, chunk: Chunk) -> InterpretResult {
@@ -50,6 +56,10 @@ impl VM {
 
     pub(crate) fn stack_pop(&mut self) -> Value {
         self.stack.pop().expect("nothing to pop")
+    }
+
+    pub(crate) fn stack_peek(&mut self) -> &Value {
+        &self.stack[self.stack.len() - 1]
     }
 
     pub fn run(&mut self) -> InterpretResult {
@@ -126,9 +136,7 @@ impl VM {
 
                 // Pop
                 9 => {
-                    let pop = self.stack_pop();
-                    #[cfg(feature = "debug-mode")]
-                    println!("instr Pop {:?}", pop);
+                    _ = self.stack_pop();
                 }
 
                 // TODO: remove print
@@ -166,8 +174,83 @@ impl VM {
                         todo!()
                     }
                 }
+                // DefineGlobal
+                12 => {
+                    let name = read_constant!();
+                    if let Value::Obj(o) = &name {
+                        if let ObjType::String(s) = &o.inner().kind {
+                            let popped = self.stack_pop();
+                            self.globals.set(s.clone(), popped);
+                        } else {
+                            self.type_error(
+                                RuntimeType::String,
+                                TypeErrorType::GlobalNameMustBeString,
+                            );
+                        }
+                    } else {
+                        self.type_error(RuntimeType::String, TypeErrorType::GlobalNameMustBeString);
+                    }
+                }
+                // GetGlobal
+                13 => {
+                    let name = read_constant!();
+                    if let Value::Obj(o) = &name {
+                        if let ObjType::String(s) = &o.inner().kind {
+                            if let Some(value) = self.globals.get(s) {
+                                self.stack_push(value.clone());
+                            } else {
+                                self.runtime_error(RuntimeErrorType::UndefinedVariable {
+                                    name: s.as_str().to_string(),
+                                });
+                            }
+                        } else {
+                            self.type_error(
+                                RuntimeType::String,
+                                TypeErrorType::GlobalNameMustBeString,
+                            );
+                        }
+                    } else {
+                        self.type_error(RuntimeType::String, TypeErrorType::GlobalNameMustBeString);
+                    }
+                }
+                // SetGlobal
+                14 => {
+                    let name = read_constant!();
+                    if let Value::Obj(o) = &name {
+                        if let ObjType::String(s) = &o.inner().kind {
+                            let value = self.stack_peek().clone();
+                            if self.globals.set(s.clone(), value) {
+                                self.globals.delete(s.hash());
+                                self.runtime_error(RuntimeErrorType::UndefinedVariable {
+                                    name: s.as_str().to_string(),
+                                });
+                            }
+                        } else {
+                            self.type_error(
+                                RuntimeType::String,
+                                TypeErrorType::GlobalNameMustBeString,
+                            );
+                        }
+                    } else {
+                        self.type_error(RuntimeType::String, TypeErrorType::GlobalNameMustBeString);
+                    }
+                }
                 _ => unimplemented!(),
             }
+        }
+    }
+
+    fn type_error(&self, expected: RuntimeType, kind: TypeErrorType) -> RuntimeError {
+        RuntimeError {
+            kind: RuntimeErrorType::TypeError { expected, kind },
+            internal_bt: Backtrace::capture(),
+        }
+    }
+
+    fn runtime_error(&self, kind: RuntimeErrorType) -> RuntimeError {
+        RuntimeError {
+            kind,
+            internal_bt: Backtrace::capture(),
         }
     }
 
@@ -214,10 +297,10 @@ impl VM {
     fn trace_refs(&self) {
         while self.grey_stack.borrow().len() > 0 {
             let object = self.grey_stack.borrow_mut().pop().unwrap();
-            self.blacken_object(object);
+            VM::blacken_object(object);
         }
     }
-    fn blacken_object(&self, obj: GcRef) {
+    fn blacken_object(obj: GcRef) {
         #[cfg(feature = "gc-debug-super-slow")]
         {
             println!("{:?} blacken {:?}", obj.obj, *obj);
@@ -227,7 +310,7 @@ impl VM {
             ObjType::Object(o) => {
                 for o in o.table.values() {
                     if let Value::Obj(obj) = o {
-                        self.blacken_object(*obj);
+                        VM::blacken_object(*obj);
                     }
                 }
             }
@@ -243,7 +326,7 @@ impl VM {
                 prev = obj;
                 obj = o.next;
             } else {
-                let mut unreached = obj;
+                let unreached = obj;
                 obj = o.next;
                 if let Some(mut prev) = prev {
                     unsafe { &mut *prev.as_mut() }.next = obj;

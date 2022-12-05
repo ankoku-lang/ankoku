@@ -1,4 +1,4 @@
-use super::{expr::Expr, tokenizer::Token, Parser, ParserResult};
+use super::{expr::Expr, tokenizer::Token, Parser, ParserError, ParserResult};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stmt {
@@ -10,17 +10,25 @@ impl Stmt {
         Self { kind }
     }
 
-    pub fn parse(tokens: Vec<Token>, source: Vec<char>) -> ParserResult<Vec<Stmt>> {
+    pub fn parse(tokens: Vec<Token>, source: Vec<char>) -> (Vec<Stmt>, Vec<ParserError>) {
         let mut parser = Parser::new(tokens, source);
         let mut stmts = vec![];
-        while let Ok(stmt) = parser.statement() {
-            stmts.push(stmt);
+        let mut errors = vec![];
+        while !parser.at_end() {
+            let stmt = parser.declaration();
+            if let Ok(stmt) = stmt {
+                stmts.push(stmt);
+            } else if let Err(e) = stmt {
+                errors.push(e);
+                parser.synchronize();
+            };
         }
-        Ok(stmts)
+        (stmts, errors)
     }
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum StmtType {
     Print(Expr),
     Expr(Expr),
+    Var(String, Expr),
 }
