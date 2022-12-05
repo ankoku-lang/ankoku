@@ -23,13 +23,20 @@ Pronounced an ko ku. Japanese for "darkness", because the language is emo.
 
 -   [x] implement chunks
 -   [x] implement start of bytecode interpreter
--   [ ] implement hashmaps
+-   [x] implement hashmaps
+-   [x] implement global variables
+-   [ ] implement local variables
+-   [ ] implement control flow
+-   [ ] implement functions
+-   [ ] implement closures
+-   [ ] implement classes
 
 ### parsing
 
--   [ ] implement panic mode and proper errors in parser
--   [ ] fix error handling to not suck
+-   [x] implement panic mode and proper errors in parser
+-   [x] fix error handling to not suck
 
 ### chores
 
 -   [ ] switch to github flow branching and protect `master`
+        s
