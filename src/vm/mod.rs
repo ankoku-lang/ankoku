@@ -126,9 +126,7 @@ impl VM {
 
                 // Pop
                 9 => {
-                    let pop = self.stack_pop();
-                    #[cfg(feature = "debug-mode")]
-                    println!("instr Pop {:?}", pop);
+                    _ = self.stack_pop();
                 }
 
                 // TODO: remove print
