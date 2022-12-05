@@ -180,7 +180,8 @@ impl Tokenizer {
             '{' => return Ok(self.new_token(TokenType::LBrace)),
             '}' => return Ok(self.new_token(TokenType::RBrace)),
             ';' => return Ok(self.new_token(TokenType::Semicolon)),
-            ',' => return Ok(self.new_token(TokenType::Dot)),
+            ',' => return Ok(self.new_token(TokenType::Comma)),
+            '.' => return Ok(self.new_token(TokenType::Dot)),
             '-' => return Ok(self.new_token(TokenType::Minus)),
             '+' => return Ok(self.new_token(TokenType::Plus)),
             '/' => {

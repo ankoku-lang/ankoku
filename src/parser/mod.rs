@@ -1,4 +1,5 @@
-pub mod ast;
+pub mod expr;
+pub mod stmt;
 pub mod tokenizer;
 
 use std::{
@@ -7,10 +8,13 @@ use std::{
 };
 
 use crate::{
-    parser::ast::{AstNode, AstType},
+    parser::expr::{Expr, ExprType},
     parser::tokenizer::{Token, TokenType},
     util::error::AnkokuError,
+    vm::{obj::AnkokuString, table::HashTable},
 };
+
+use self::stmt::{Stmt, StmtType};
 pub type ParserResult<T> = Result<T, ParserError>;
 #[derive(Clone)]
 pub struct ParserError {
@@ -37,21 +41,30 @@ impl Display for ParserError {
 pub enum ParserErrorType {
     RealParseFailed,
     UnclosedParentheses,
-    FailedToMatchAnyRules,
+    ExpectedExpression,
+    ExpectedSemicolon,
+    ObjectNeedsIdentifierKeys,
+    UnclosedObject,
 }
 impl AnkokuError for ParserError {
     fn msg(&self) -> &str {
         match self.kind {
             ParserErrorType::RealParseFailed => "parsing real failed",
             ParserErrorType::UnclosedParentheses => "unclosed parentheses",
-            ParserErrorType::FailedToMatchAnyRules => "matches no rules",
+            ParserErrorType::ExpectedExpression => "expected expression",
+            ParserErrorType::ExpectedSemicolon => "expected semicolon: ;",
+            ParserErrorType::ObjectNeedsIdentifierKeys => "object keys must be identifiers",
+            ParserErrorType::UnclosedObject => "unclosed object, expected }",
         }
     }
     fn code(&self) -> u32 {
         match self.kind {
+            ParserErrorType::ExpectedExpression => 2001,
             ParserErrorType::RealParseFailed => 2002,
             ParserErrorType::UnclosedParentheses => 2003,
-            ParserErrorType::FailedToMatchAnyRules => 2001,
+            ParserErrorType::ExpectedSemicolon => 2004,
+            ParserErrorType::ObjectNeedsIdentifierKeys => 2005,
+            ParserErrorType::UnclosedObject => 2006,
         }
     }
 
@@ -83,7 +96,41 @@ impl Parser {
             panic_mode: false,
         }
     }
-    pub fn expression(&mut self) -> ParserResult<AstNode> {
+
+    // TODO: errors for statements
+
+    pub fn statement(&mut self) -> ParserResult<Stmt> {
+        if self.mtch(&[TokenType::Print]) {
+            return self.print_statement();
+        }
+        self.expression_statement()
+    }
+
+    fn expect_semi<T>(&mut self, a: T) -> ParserResult<T> {
+        if self.peek().kind == TokenType::Semicolon {
+            self.advance();
+            Ok(a)
+        } else {
+            Err(ParserError::new(
+                ParserErrorType::ExpectedSemicolon,
+                self.peek(),
+            ))
+        }
+    }
+
+    fn expression_statement(&mut self) -> ParserResult<Stmt> {
+        let stmt = Stmt::new(StmtType::Expr(self.expression()?));
+
+        self.expect_semi(stmt)
+    }
+
+    fn print_statement(&mut self) -> ParserResult<Stmt> {
+        let stmt = Stmt::new(StmtType::Print(self.expression()?));
+
+        self.expect_semi(stmt)
+    }
+
+    pub fn expression(&mut self) -> ParserResult<Expr> {
         match self.equality() {
             Ok(a) => Ok(a),
             Err(err) => {
@@ -93,7 +140,7 @@ impl Parser {
         }
     }
 
-    pub fn equality(&mut self) -> ParserResult<AstNode> {
+    pub fn equality(&mut self) -> ParserResult<Expr> {
         let mut e = self.comparison()?;
 
         while self.mtch(&[TokenType::BangEqual, TokenType::EqualEqual]) {
@@ -104,7 +151,7 @@ impl Parser {
         Ok(e)
     }
 
-    pub fn comparison(&mut self) -> ParserResult<AstNode> {
+    pub fn comparison(&mut self) -> ParserResult<Expr> {
         let mut e = self.term()?;
         while self.mtch(&[
             TokenType::Greater,
@@ -118,7 +165,7 @@ impl Parser {
         }
         Ok(e)
     }
-    pub fn term(&mut self) -> ParserResult<AstNode> {
+    pub fn term(&mut self) -> ParserResult<Expr> {
         let mut e = self.factor()?;
         while self.mtch(&[TokenType::Minus, TokenType::Plus]) {
             let op = self.prev();
@@ -127,7 +174,7 @@ impl Parser {
         }
         Ok(e)
     }
-    pub fn factor(&mut self) -> ParserResult<AstNode> {
+    pub fn factor(&mut self) -> ParserResult<Expr> {
         let mut e = self.unary()?;
         while self.mtch(&[TokenType::Slash, TokenType::Star]) {
             let op = self.prev();
@@ -136,7 +183,7 @@ impl Parser {
         }
         Ok(e)
     }
-    pub fn unary(&mut self) -> ParserResult<AstNode> {
+    pub fn unary(&mut self) -> ParserResult<Expr> {
         if self.mtch(&[TokenType::Bang, TokenType::Minus]) {
             let op = self.prev();
             let inner = self.unary()?;
@@ -144,24 +191,24 @@ impl Parser {
         }
         self.primary()
     }
-    pub fn primary(&mut self) -> ParserResult<AstNode> {
+    pub fn primary(&mut self) -> ParserResult<Expr> {
         if self.mtch(&[TokenType::False]) {
-            return Ok(AstNode::new(self.prev(), AstType::Bool(false)));
+            return Ok(Expr::new(self.prev(), ExprType::Bool(false)));
         }
         if self.mtch(&[TokenType::True]) {
-            return Ok(AstNode::new(self.prev(), AstType::Bool(true)));
+            return Ok(Expr::new(self.prev(), ExprType::Bool(true)));
         }
         if self.mtch(&[TokenType::Null]) {
-            return Ok(AstNode::new(self.prev(), AstType::Null));
+            return Ok(Expr::new(self.prev(), ExprType::Null));
         }
         if self.mtch(&[TokenType::Number]) {
             let a = self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
                 .iter()
                 .collect::<String>();
 
-            return Ok(AstNode::new(
+            return Ok(Expr::new(
                 self.prev(),
-                AstType::Real(a.parse::<f64>().map_err(|_| {
+                ExprType::Real(a.parse::<f64>().map_err(|_| {
                     ParserError::new(ParserErrorType::RealParseFailed, self.prev())
                 })?),
             ));
@@ -172,7 +219,7 @@ impl Parser {
             let expr = self.expression()?;
             if self.peek().kind == TokenType::RParen {
                 self.advance();
-                return Ok(AstNode::new(self.prev(), AstType::Grouping(Box::new(expr))));
+                return Ok(Expr::new(self.prev(), ExprType::Grouping(Box::new(expr))));
             } else {
                 return Err(ParserError::new(
                     ParserErrorType::UnclosedParentheses,
@@ -181,26 +228,71 @@ impl Parser {
             }
         }
 
+        if self.mtch(&[TokenType::LBrace]) {
+            return self.object();
+        }
+
         Err(ParserError::new(
-            ParserErrorType::FailedToMatchAnyRules,
+            ParserErrorType::ExpectedExpression,
             self.peek(),
         ))
     }
-    fn binop(&self, op: Token, left: AstNode, right: AstNode) -> AstNode {
-        match op.kind {
-            TokenType::Plus => AstNode::new(op, AstType::Add(Box::new(left), Box::new(right))),
-            TokenType::Minus => {
-                AstNode::new(op, AstType::Subtract(Box::new(left), Box::new(right)))
+    fn consume(&mut self, expect: TokenType, error: ParserErrorType) -> ParserResult<Token> {
+        if self.peek().kind == expect {
+            Ok(self.advance())
+        } else {
+            Err(ParserError::new(error, self.peek()))
+        }
+    }
+    fn object(&mut self) -> ParserResult<Expr> {
+        let mut pairs = Vec::new();
+        let start = self.prev();
+        loop {
+            self.consume(
+                TokenType::Identifier,
+                ParserErrorType::ObjectNeedsIdentifierKeys,
+            )?;
+            let key = self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
+                .iter()
+                .collect::<String>();
+            println!(
+                "{}",
+                self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
+                    .iter()
+                    .collect::<String>()
+            );
+            self.consume(TokenType::Equal, ParserErrorType::ExpectedExpression)?; // FIXME: create new error type for this
+            let value = self.expression()?;
+
+            pairs.push((key, Box::new(value)));
+
+            if self.peek().kind == TokenType::RBrace {
+                self.advance();
+                return Ok(Expr::new(start, ExprType::Object(pairs)));
+            } else if self.peek().kind == TokenType::Comma {
+                self.advance();
+                continue;
+            } else {
+                return Err(ParserError::new(
+                    ParserErrorType::UnclosedObject,
+                    self.peek(),
+                ));
             }
-            TokenType::Star => AstNode::new(op, AstType::Multiply(Box::new(left), Box::new(right))),
-            TokenType::Slash => AstNode::new(op, AstType::Divide(Box::new(left), Box::new(right))),
+        }
+    }
+    fn binop(&self, op: Token, left: Expr, right: Expr) -> Expr {
+        match op.kind {
+            TokenType::Plus => Expr::new(op, ExprType::Add(Box::new(left), Box::new(right))),
+            TokenType::Minus => Expr::new(op, ExprType::Subtract(Box::new(left), Box::new(right))),
+            TokenType::Star => Expr::new(op, ExprType::Multiply(Box::new(left), Box::new(right))),
+            TokenType::Slash => Expr::new(op, ExprType::Divide(Box::new(left), Box::new(right))),
             _ => unimplemented!(),
         }
     }
-    fn unop(&self, op: Token, inner: AstNode) -> AstNode {
+    fn unop(&self, op: Token, inner: Expr) -> Expr {
         match op.kind {
-            TokenType::Minus => AstNode::new(op, AstType::Negate(Box::new(inner))),
-            TokenType::Bang => AstNode::new(op, AstType::Not(Box::new(inner))),
+            TokenType::Minus => Expr::new(op, ExprType::Negate(Box::new(inner))),
+            TokenType::Bang => Expr::new(op, ExprType::Not(Box::new(inner))),
             _ => unimplemented!(),
         }
     }

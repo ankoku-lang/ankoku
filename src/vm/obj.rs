@@ -2,7 +2,9 @@ use std::{hash::Hasher, ptr::NonNull};
 
 use crate::util::fxhash::FxHasher;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+use super::table::HashTable;
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Obj {
     pub kind: ObjType,
     pub(crate) next: Option<NonNull<Obj>>,
@@ -32,9 +34,30 @@ impl From<AnkokuString> for Obj {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum ObjType {
     String(AnkokuString),
+    Object(Object),
+}
+
+/// Not an [Obj], an [Object]. Objects are a language feature, basically a hashtable, but [Obj]s are a VM implementation of heap-allocated objects.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Object {
+    pub table: HashTable,
+}
+
+impl Object {
+    pub fn new() -> Self {
+        Self {
+            table: HashTable::new(),
+        }
+    }
+}
+
+impl Default for Object {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Clone, Debug)]

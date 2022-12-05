@@ -1,11 +1,22 @@
+use std::fmt::Debug;
+
 use super::{obj::AnkokuString, value::Value};
 
+#[derive(Clone, PartialEq)]
 pub struct HashTable {
     entries: Vec<Entry>,
     count: usize,
 }
 const TABLE_MAX_LOAD: f32 = 0.75;
-
+impl Debug for HashTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HashTable {{")?;
+        for (k, v) in self.entries() {
+            write!(f, " {} = {:?}", k.as_str(), v)?;
+        }
+        Ok(())
+    }
+}
 impl HashTable {
     pub fn new() -> Self {
         Self {
@@ -14,6 +25,17 @@ impl HashTable {
         }
     }
 
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.entries
+            .iter()
+            .filter_map(|v| if v.key != None { Some(&v.value) } else { None })
+    }
+
+    pub fn entries(&self) -> impl Iterator<Item = (&AnkokuString, &Value)> {
+        self.entries
+            .iter()
+            .filter_map(|v| v.key.as_ref().map(|k| (k, &v.value)))
+    }
     pub fn len(&self) -> usize {
         self.count
     }
@@ -29,7 +51,7 @@ impl HashTable {
         let mut tombstone: Option<usize> = None;
         loop {
             entry = &entries[index];
-            if entry.key == 0 {
+            if entry.key == None {
                 if entry.value == Value::Null {
                     // Empty entry.
                     return if let Some(t) = tombstone { t } else { index };
@@ -39,24 +61,26 @@ impl HashTable {
                         tombstone = Some(index);
                     }
                 }
-            } else if entry.key == key {
-                return index;
+            } else if let Some(k) = &entry.key {
+                if k.hash() == key {
+                    return index;
+                }
             }
             index = (index + 1) % entries.len();
         }
     }
-    pub fn get(&self, key: usize) -> Option<&Value> {
+    pub fn get(&self, key: &AnkokuString) -> Option<&Value> {
         if self.count == 0 {
             None
         } else {
-            let entry = &self.entries[HashTable::find_entry(&self.entries, key)];
-            if entry.key == 0 {
+            let entry = &self.entries[HashTable::find_entry(&self.entries, key.hash())];
+            if entry.key == None {
                 return None;
             }
             Some(&entry.value)
         }
     }
-    pub fn set(&mut self, key: usize, value: Value) -> bool {
+    pub fn set(&mut self, key: AnkokuString, value: Value) -> bool {
         if (self.count + 1) as f32 > self.entries.len() as f32 * TABLE_MAX_LOAD {
             let capacity = if self.entries.len() < 8 {
                 8
@@ -68,31 +92,31 @@ impl HashTable {
 
             for _ in 0..capacity {
                 entries.push(Entry {
-                    key: 0,
+                    key: None,
                     value: Value::Null,
                 });
             }
 
             for i in 0..self.entries.len() {
                 let entry = &self.entries[i];
-                if entry.key == 0 {
+                if entry.key == None {
                     continue;
                 }
-                let dest = HashTable::find_entry(&entries, entry.key);
+                let dest = HashTable::find_entry(&entries, entry.key.as_ref().unwrap().hash());
 
-                entries[dest].key = entry.key;
+                entries[dest].key = entry.key.clone();
                 entries[dest].value = entry.value.clone();
             }
 
             self.entries = entries;
         }
-        let entry = HashTable::find_entry(&self.entries, key);
-        let is_new_key = self.entries[entry].key == 0;
+        let entry = HashTable::find_entry(&self.entries, key.hash());
+        let is_new_key = self.entries[entry].key == None;
         if is_new_key {
             self.count += 1;
         }
         let entry = &mut self.entries[entry];
-        entry.key = key;
+        entry.key = Some(key);
         entry.value = value;
         is_new_key
     }
@@ -100,8 +124,8 @@ impl HashTable {
     pub fn add_all(&mut self, from: &HashTable) {
         for i in 0..from.entries.len() {
             let entry = &from.entries[i];
-            if entry.key != 0 {
-                self.set(entry.key, entry.value.clone());
+            if let Some(k) = entry.key.clone() {
+                self.set(k, entry.value.clone());
             }
         }
     }
@@ -111,25 +135,13 @@ impl HashTable {
             false
         } else {
             let entry = HashTable::find_entry(&self.entries, key);
-            if self.entries[entry].key == 0 {
+            if self.entries[entry].key == None {
                 return false;
             }
-            self.entries[entry].key = 0;
+            self.entries[entry].key = None;
             self.entries[entry].value = Value::Bool(true);
             true
         }
-    }
-}
-
-impl From<AnkokuString> for usize {
-    fn from(v: AnkokuString) -> Self {
-        v.hash()
-    }
-}
-
-impl From<&AnkokuString> for usize {
-    fn from(v: &AnkokuString) -> Self {
-        v.hash()
     }
 }
 
@@ -141,14 +153,8 @@ impl Default for HashTable {
 
 #[derive(Clone, Debug, PartialEq)]
 struct Entry {
-    key: usize,
+    key: Option<AnkokuString>,
     value: Value,
-}
-
-impl Entry {
-    pub fn new(key: usize, value: Value) -> Self {
-        Self { key, value }
-    }
 }
 
 #[cfg(test)]
@@ -165,9 +171,9 @@ mod tests {
         let key = AnkokuString::new("hello_world".into());
 
         let mut table = HashTable::new();
-        table.set(key.hash(), thingy.clone());
+        table.set(key.clone(), thingy.clone());
 
-        assert_eq!(table.get(key.hash()), Some(&thingy));
+        assert_eq!(table.get(&key), Some(&thingy));
     }
 
     #[test]
@@ -178,7 +184,7 @@ mod tests {
         for i in 0..10000 {
             let thingy = Value::Bool(true);
             let key = AnkokuString::new(format!("i{}", i));
-            table.set(key.hash(), thingy.clone());
+            table.set(key, thingy.clone());
         }
         println!("stress test inserts took {:?}", start.elapsed());
     }

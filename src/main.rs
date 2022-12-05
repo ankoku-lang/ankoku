@@ -1,11 +1,17 @@
+use std::process::exit;
+
 use ankoku::{
-    compiler::visitor::Compiler,
-    parser::{ast::AstNode, tokenizer::Tokenizer},
+    compiler::Compiler,
+    parser::{expr::Expr, stmt::Stmt, tokenizer::Tokenizer},
     vm::{instruction::Instruction, VM},
 };
 
 fn main() {
     let args = std::env::args().collect::<Vec<_>>();
+    if args.len() < 2 {
+        println!("usage: ankoku <file.ak>");
+        exit(1);
+    }
     let input = &args[1];
     let source = std::fs::read_to_string(input).unwrap();
 
@@ -13,10 +19,10 @@ fn main() {
         .map(|v| v.unwrap())
         .collect::<Vec<_>>();
 
-    let ast = AstNode::parse(tokens, source.chars().collect()).expect("parse error");
-    let mut compiled = Compiler::compile(&ast);
+    let ast = Stmt::parse(tokens, source.chars().collect()).expect("parse error");
+    let mut vm = VM::new();
+    let mut compiled = Compiler::compile(&ast, &vm);
     compiled.disassemble("compiled");
     compiled.write(Instruction::Return.into(), 1);
-    let mut vm = VM::new();
     vm.interpret(compiled);
 }

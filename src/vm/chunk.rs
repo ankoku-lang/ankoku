@@ -21,9 +21,18 @@ impl Chunk {
         self.code.push(byte);
         self.lines.push(line);
     }
-    pub fn add_constant(&mut self, constant: Value) -> u8 {
+
+    pub(crate) fn last_byte_line(&self) -> usize {
+        if !self.lines.is_empty() {
+            self.lines[self.lines.len() - 1]
+        } else {
+            1
+        }
+    }
+
+    pub fn add_constant(&mut self, constant: Value) -> usize {
         self.constants.push(constant);
-        (self.constants.len() - 1) as u8
+        self.constants.len() - 1
     }
     pub fn disassemble(&self, name: &str) {
         println!("== {} ==", name);
@@ -44,7 +53,11 @@ impl Chunk {
             | Instruction::Sub
             | Instruction::Mul
             | Instruction::Div
-            | Instruction::Not => {
+            | Instruction::Not
+            | Instruction::Pop
+            | Instruction::Print
+            | Instruction::NewObject
+            | Instruction::ObjectSet => {
                 println!("{:?}", instruction);
                 offset + 1
             }
@@ -80,10 +93,10 @@ mod tests {
 
         let constant = chunk.add_constant(1.0.into());
         chunk.write(Instruction::Constant.into(), 1);
-        chunk.write(constant, 1);
+        chunk.write(constant as u8, 1);
 
         chunk.disassemble("test");
 
-        assert_eq!(chunk.code, vec![1, 2, constant]);
+        assert_eq!(chunk.code, vec![1, 2, constant as u8]);
     }
 }

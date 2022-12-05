@@ -9,6 +9,10 @@ pub enum Instruction {
     Mul = 6,
     Div = 7,
     Not = 8,
+    Pop = 9,
+    NewObject = 10, // TODO: rip out and replace with something more OOPy maybe or not idk
+    ObjectSet = 11,
+    Print = 100, // FIXME: TEMP, will be removed when functions work
 }
 
 impl From<u8> for Instruction {
@@ -24,6 +28,10 @@ impl From<u8> for Instruction {
             6 => Mul,
             7 => Div,
             8 => Not,
+            9 => Pop,
+            11 => ObjectSet,
+            10 => NewObject,
+            100 => Print,
             _ => panic!("not an instruction: {:?}", v),
         }
     }

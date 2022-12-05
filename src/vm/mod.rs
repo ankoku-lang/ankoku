@@ -1,10 +1,16 @@
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     ops::{Deref, DerefMut},
     ptr::{drop_in_place, NonNull},
 };
 
-use self::{chunk::Chunk, obj::Obj, value::Value};
+use crate::vm::obj::Object;
+
+use self::{
+    chunk::Chunk,
+    obj::{Obj, ObjType},
+    value::Value,
+};
 
 pub mod chunk;
 mod gc;
@@ -18,6 +24,7 @@ pub struct VM {
     ip: usize,
     stack: Vec<Value>,
     objects: Cell<Option<NonNull<Obj>>>, // Option<NonNull<T>> is the same size as *mut T where None is a nullptr, this is just safer (not by much; this code still does raw pointer manipulation)
+    grey_stack: RefCell<Vec<GcRef>>,
 }
 
 impl VM {
@@ -27,6 +34,7 @@ impl VM {
             ip: 0,
             stack: Vec::with_capacity(128),
             objects: Cell::new(None),
+            grey_stack: RefCell::new(Vec::new()),
         }
     }
     pub fn interpret(&mut self, chunk: Chunk) -> InterpretResult {
@@ -74,7 +82,7 @@ impl VM {
             match instruction {
                 // Return
                 1 => {
-                    return InterpretResult::Ok(self.stack_pop());
+                    return InterpretResult::Ok;
                 }
                 // Constant
                 2 => {
@@ -115,6 +123,49 @@ impl VM {
                     let a = self.stack_pop();
                     self.stack_push(a.not(self));
                 }
+
+                // Pop
+                9 => {
+                    let pop = self.stack_pop();
+                    #[cfg(feature = "debug-mode")]
+                    println!("instr Pop {:?}", pop);
+                }
+
+                // TODO: remove print
+                100 => {
+                    let pop = self.stack_pop();
+                    println!("{:?}", pop);
+                }
+
+                // NewObject
+                10 => self.stack_push(Value::Obj(
+                    self.alloc(Obj::new(ObjType::Object(Object::new()))),
+                )),
+
+                // ObjectSet
+                11 => {
+                    let value = self.stack_pop();
+                    let key = self.stack_pop();
+                    if let Value::Obj(o) = key {
+                        if let ObjType::String(key) = &o.kind {
+                            let len = self.stack.len();
+                            let object = &mut self.stack[len - 1];
+                            if let Value::Obj(o) = object {
+                                if let ObjType::Object(o) = &mut o.deref_mut().kind {
+                                    o.table.set(key.clone(), value);
+                                } else {
+                                    todo!()
+                                }
+                            } else {
+                                todo!()
+                            }
+                        } else {
+                            todo!()
+                        }
+                    } else {
+                        todo!()
+                    }
+                }
                 _ => unimplemented!(),
             }
         }
@@ -134,9 +185,13 @@ impl VM {
         GcRef { obj: heap_obj }
     }
     fn mark_roots(&self) {
+        println!("{:?}", self.stack);
+
         for slot in &self.stack {
             self.mark(slot);
         }
+
+        // TODO: when global variables implemented, mark those and the call frames and upvalues and compiler? https://craftinginterpreters.com/garbage-collection.html#less-obvious-roots
     }
 
     fn mark(&self, value: &Value) {
@@ -145,10 +200,71 @@ impl VM {
         }
     }
     fn mark_object(&self, mut obj: GcRef) {
-        if obj.obj.is_null() {
+        if obj.obj.is_null() || obj.marked {
             return;
         }
         obj.marked = true;
+
+        self.grey_stack.borrow_mut().push(obj);
+
+        #[cfg(feature = "gc-debug-super-slow")]
+        println!("{:?} mark {:?}", obj.obj, obj.inner());
+    }
+
+    fn trace_refs(&self) {
+        while self.grey_stack.borrow().len() > 0 {
+            let object = self.grey_stack.borrow_mut().pop().unwrap();
+            self.blacken_object(object);
+        }
+    }
+    fn blacken_object(&self, obj: GcRef) {
+        #[cfg(feature = "gc-debug-super-slow")]
+        {
+            println!("{:?} blacken {:?}", obj.obj, *obj);
+        }
+        match &obj.kind {
+            ObjType::String(_) => {}
+            ObjType::Object(o) => {
+                for o in o.table.values() {
+                    if let Value::Obj(obj) = o {
+                        self.blacken_object(*obj);
+                    }
+                }
+            }
+        }
+    }
+    fn sweep(&self) {
+        let mut prev = None;
+        let mut obj = self.objects.get();
+        while let Some(mut o) = obj {
+            let o = unsafe { &mut *o.as_mut() };
+            if o.marked {
+                o.marked = false;
+                prev = obj;
+                obj = o.next;
+            } else {
+                let mut unreached = obj;
+                obj = o.next;
+                if let Some(mut prev) = prev {
+                    unsafe { &mut *prev.as_mut() }.next = obj;
+                } else {
+                    self.objects.set(obj);
+                }
+
+                if let Some(e) = unreached {
+                    println!("{:?} sweeping {:?}", e, unsafe { e.as_ref() });
+                    unsafe {
+                        drop_in_place(e.as_ptr());
+                        #[cfg(feature = "gc-debug-super-slow")]
+                        {
+                            *e.as_ptr() = std::mem::zeroed(); // for testing, to make sure nothing is used after free
+                        }
+                    }
+                } else {
+                    println!("nullptr {:?}", unreached);
+                }
+            }
+        }
     }
     pub fn collect(&self) {
         #[cfg(feature = "gc-debug-super-slow")]
@@ -157,7 +273,8 @@ impl VM {
         }
 
         self.mark_roots();
-
+        self.trace_refs();
+        self.sweep();
         #[cfg(feature = "gc-debug-super-slow")]
         {
             println!("-- gc end");
@@ -185,7 +302,7 @@ impl Drop for VM {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GcRef {
     obj: *mut Obj,
 }
@@ -210,9 +327,9 @@ impl DerefMut for GcRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InterpretResult {
-    Ok(Value),
+    Ok,
     CompileError,
     RuntimeError,
 }
@@ -221,20 +338,31 @@ pub enum InterpretResult {
 mod tests {
     use crate::vm::{chunk::Chunk, instruction::Instruction, value::Value, InterpretResult, VM};
 
-    use super::obj::{AnkokuString, Obj, ObjType};
+    use super::obj::AnkokuString;
 
     #[test]
     fn gc() {
         let mut chunk = Chunk::new();
         let mut vm = VM::new();
         let constant = chunk.add_constant(Value::Obj(
-            vm.alloc(AnkokuString::new("hello world".into()).into()),
+            vm.alloc(AnkokuString::new("hello".into()).into()),
         ));
         chunk.write(Instruction::Constant as u8, 1);
-        chunk.write(constant, 1);
+        chunk.write(constant as u8, 1);
+        let constant = chunk.add_constant(Value::Obj(
+            vm.alloc(AnkokuString::new(" world".into()).into()),
+        ));
+        chunk.write(Instruction::Constant as u8, 1);
+        chunk.write(constant as u8, 1);
+
+        chunk.write(Instruction::Add as u8, 1);
         chunk.write(Instruction::Return as u8, 1);
-        vm.interpret(chunk);
-        println!("{:?}", vm.stack);
+        let _out = vm.interpret(chunk);
+
+        vm.collect();
+        println!("gc done");
+
+        // I don't really know how you unit test a GC. I think it works idk
     }
 
     #[test]
@@ -243,17 +371,17 @@ mod tests {
 
         let constant = chunk.add_constant(1.2.into());
         chunk.write(Instruction::Constant.into(), 1);
-        chunk.write(constant, 1);
+        chunk.write(constant as u8, 1);
 
         let constant = chunk.add_constant(3.4.into());
         chunk.write(Instruction::Constant.into(), 1);
-        chunk.write(constant, 1);
+        chunk.write(constant as u8, 1);
 
         chunk.write(Instruction::Add.into(), 1);
 
         let constant = chunk.add_constant(5.6.into());
         chunk.write(Instruction::Constant.into(), 1);
-        chunk.write(constant, 1);
+        chunk.write(constant as u8, 1);
 
         chunk.write(Instruction::Div.into(), 1);
 
@@ -263,9 +391,6 @@ mod tests {
 
         chunk.disassemble("test");
         let mut vm = VM::new();
-        assert_eq!(
-            vm.interpret(chunk),
-            InterpretResult::Ok(Value::Real(-((1.2 + 3.4) / 5.6)))
-        );
+        assert_eq!(vm.interpret(chunk), InterpretResult::Ok);
     }
 }

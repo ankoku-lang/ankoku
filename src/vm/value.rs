@@ -1,13 +1,39 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    hash::{Hash, Hasher},
+};
 
 use super::{obj::ObjType, GcRef, VM};
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 pub enum Value {
     Bool(bool),
     Null,
     Real(f64),
     Obj(GcRef),
+}
+impl Eq for Value {}
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Bool(l0), Self::Bool(r0)) => l0 == r0,
+            (Self::Real(l0), Self::Real(r0)) => l0 == r0,
+            (Self::Obj(l0), Self::Obj(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+impl Hash for Value {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let tag = core::mem::discriminant(self);
+        Hash::hash(&tag, state);
+        match self {
+            Value::Bool(b) => Hash::hash(b, state),
+            Value::Real(f) => Hash::hash(&f.to_bits(), state),
+            Value::Obj(r) => Hash::hash(r, state),
+            _ => {}
+        }
+    }
 }
 
 impl Value {
@@ -46,6 +72,7 @@ impl Value {
             Value::Real(v) => v.to_string(),
             Value::Obj(o) => match &o.inner().kind {
                 ObjType::String(v) => v.clone().into_inner(),
+                ObjType::Object(_) => todo!("typeerrors"),
             },
             _ => todo!("implement proper type errors here instead of panics"),
         }
@@ -55,9 +82,10 @@ impl Value {
         match self {
             Value::Real(l) => (l + rhs.coerce_real()).into(),
             Value::Obj(gcref) => match &gcref.kind {
-                super::obj::ObjType::String(self_string) => {
+                ObjType::String(self_string) => {
                     Value::Obj(gc.alloc(self_string.concat(&rhs.coerce_str()).into()))
                 }
+                ObjType::Object(_) => todo!(),
             },
             _ => todo!("implement proper type errors here instead of panics"),
         }
@@ -98,12 +126,14 @@ impl Value {
 
 impl Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Value(")?;
         match self {
-            Self::Bool(b) => write!(f, "{}", b),
+            Self::Bool(b) => write!(f, "Bool({})", b),
             Self::Null => write!(f, "null"),
-            Self::Real(n) => write!(f, "{}", n),
-            Self::Obj(a) => write!(f, "{:?}", a),
-        }
+            Self::Real(n) => write!(f, "Real({})", n),
+            Self::Obj(a) => write!(f, "Obj({:?})", a.inner()),
+        }?;
+        write!(f, ")")
     }
 }
 impl From<f64> for Value {

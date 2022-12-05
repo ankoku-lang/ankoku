@@ -12,25 +12,24 @@
 
 //! Fast, non-cryptographic hash used by rustc and Firefox.
 
-#[cfg(feature = "std")]
 extern crate std;
 
 use core::convert::TryInto;
 use core::default::Default;
-#[cfg(feature = "std")]
+
 use core::hash::BuildHasherDefault;
 use core::hash::Hasher;
 use core::mem::size_of;
 use core::ops::BitXor;
-#[cfg(feature = "std")]
+
 use std::collections::{HashMap, HashSet};
 
 /// Type alias for a hashmap using the `fx` hash algorithm.
-#[cfg(feature = "std")]
+
 pub type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
 /// Type alias for a hashmap using the `fx` hash algorithm.
-#[cfg(feature = "std")]
+
 pub type FxHashSet<V> = HashSet<V, BuildHasherDefault<FxHasher>>;
 
 /// A speedy hash algorithm for use within rustc. The hashmap in liballoc
