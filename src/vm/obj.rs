@@ -1,10 +1,10 @@
-use std::{hash::Hasher, ptr::NonNull};
+use std::{fmt::Debug, hash::Hasher, ptr::NonNull};
 
 use crate::util::fxhash::FxHasher;
 
 use super::table::HashTable;
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq)]
 pub struct Obj {
     pub kind: ObjType,
     pub(crate) next: Option<NonNull<Obj>>,
@@ -20,7 +20,11 @@ impl Obj {
         }
     }
 }
-
+impl Debug for Obj {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.kind)
+    }
+}
 impl Drop for Obj {
     fn drop(&mut self) {
         #[cfg(feature = "gc-debug-super-slow")]
@@ -41,11 +45,15 @@ pub enum ObjType {
 }
 
 /// Not an [Obj], an [Object]. Objects are a language feature, basically a hashtable, but [Obj]s are a VM implementation of heap-allocated objects.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Object {
     pub table: HashTable,
 }
-
+impl Debug for Object {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.table.fmt(f)
+    }
+}
 impl Object {
     pub fn new() -> Self {
         Self {
@@ -60,12 +68,17 @@ impl Default for Object {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct AnkokuString {
     inner: String,
     hash: usize,
 }
 
+impl Debug for AnkokuString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.inner.fmt(f)
+    }
+}
 impl AnkokuString {
     pub fn new(str: String) -> Self {
         AnkokuString {

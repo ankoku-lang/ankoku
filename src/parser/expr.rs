@@ -1,9 +1,9 @@
-use std::fmt::Display;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
     parser::tokenizer::Token,
     parser::{Parser, ParserResult},
-    vm::{table::HashTable, value::Value, VM},
+    vm::VM,
 };
 
 use super::stmt::Stmt;
@@ -25,6 +25,8 @@ pub enum ExprType {
     // Other
     Grouping(Box<Expr>),
     Object(Vec<(String, Box<Expr>)>),
+    Identifier(Rc<String>),
+    Assign(Rc<String>, Box<Expr>),
 }
 #[derive(Clone, Debug, PartialEq)]
 pub struct Expr {
@@ -57,6 +59,8 @@ impl Display for Expr {
             ExprType::Not(inner) => write!(f, "(! {})", inner),
             ExprType::Grouping(inner) => write!(f, "{}", inner),
             ExprType::Object(table) => write!(f, "{:?}", table),
+            ExprType::Identifier(v) => write!(f, "(get {})", v),
+            ExprType::Assign(name, value) => write!(f, "(set {} to {:?})", name, value),
         }
     }
 }

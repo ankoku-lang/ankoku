@@ -12,6 +12,9 @@ pub enum Instruction {
     Pop = 9,
     NewObject = 10, // TODO: rip out and replace with something more OOPy maybe or not idk
     ObjectSet = 11,
+    DefineGlobal = 12,
+    GetGlobal = 13,
+    SetGlobal = 14,
     Print = 100, // FIXME: TEMP, will be removed when functions work
 }
 
@@ -31,6 +34,9 @@ impl From<u8> for Instruction {
             9 => Pop,
             11 => ObjectSet,
             10 => NewObject,
+            12 => DefineGlobal,
+            13 => GetGlobal,
+            14 => SetGlobal,
             100 => Print,
             _ => panic!("not an instruction: {:?}", v),
         }

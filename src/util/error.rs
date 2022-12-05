@@ -3,7 +3,7 @@ use std::{
     fmt::{Debug, Display},
 };
 
-pub trait AnkokuError: Clone + Error + Debug + Display {
+pub trait AnkokuError: Error + Debug + Display {
     fn msg(&self) -> &str;
     fn code(&self) -> u32;
     fn line_col(&self) -> Option<(u32, usize, &str)>;
@@ -16,7 +16,7 @@ pub trait ErrorReporter {
 }
 
 #[cfg(feature = "cli")]
-mod cli {
+pub mod cli {
     use owo_colors::OwoColorize;
 
     use super::{AnkokuError, ErrorReporter};
@@ -29,7 +29,7 @@ mod cli {
                 println!(
                     "{} {:04}: {}",
                     "error".bright_red().bold(),
-                    format!("ESC{}", err.code()).bold(),
+                    format!("AK{}", err.code()).bold(),
                     err.msg()
                 );
                 // println!("{} todo filename", "-->".bold().bright_cyan());
