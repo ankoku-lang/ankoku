@@ -2,7 +2,7 @@ use crate::vm::instruction::Instruction;
 
 use super::value::Value;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
@@ -61,7 +61,10 @@ impl Chunk {
                 println!("{:?}", instruction);
                 offset + 1
             }
-            Instruction::Constant => {
+            Instruction::DefineGlobal
+            | Instruction::GetGlobal
+            | Instruction::SetGlobal
+            | Instruction::Constant => {
                 println!(
                     "{:?} {} {:?}",
                     instruction,

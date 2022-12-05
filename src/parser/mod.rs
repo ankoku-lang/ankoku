@@ -3,33 +3,46 @@ pub mod stmt;
 pub mod tokenizer;
 
 use std::{
+    backtrace::Backtrace,
     error::Error,
     fmt::{Debug, Display},
+    rc::Rc,
 };
 
 use crate::{
     parser::expr::{Expr, ExprType},
     parser::tokenizer::{Token, TokenType},
     util::error::AnkokuError,
-    vm::{obj::AnkokuString, table::HashTable},
 };
 
 use self::stmt::{Stmt, StmtType};
 pub type ParserResult<T> = Result<T, ParserError>;
-#[derive(Clone)]
 pub struct ParserError {
     pub kind: ParserErrorType,
     pub token: Token,
+    pub internal_bt: Backtrace,
 }
 impl ParserError {
     pub fn new(kind: ParserErrorType, token: Token) -> Self {
-        ParserError { kind, token }
+        ParserError {
+            kind,
+            token,
+            internal_bt: Backtrace::capture(),
+        }
     }
 }
 impl Error for ParserError {}
 impl Debug for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} on {:?}", self.msg(), self.token)
+        write!(
+            f,
+            "{} on {:?}
+        internal backtrace:
+        {}",
+            self.msg(),
+            self.token,
+            self.internal_bt
+        )
     }
 }
 impl Display for ParserError {
@@ -42,9 +55,12 @@ pub enum ParserErrorType {
     RealParseFailed,
     UnclosedParentheses,
     ExpectedExpression,
-    ExpectedSemicolon,
+    ExpectedSemicolon { after_variable: bool },
     ObjectNeedsIdentifierKeys,
     UnclosedObject,
+    ExpectVariableName,
+    ExpectEqualAfterIdentifierInObject,
+    InvalidAssignmentTarget,
 }
 impl AnkokuError for ParserError {
     fn msg(&self) -> &str {
@@ -52,9 +68,20 @@ impl AnkokuError for ParserError {
             ParserErrorType::RealParseFailed => "parsing real failed",
             ParserErrorType::UnclosedParentheses => "unclosed parentheses",
             ParserErrorType::ExpectedExpression => "expected expression",
-            ParserErrorType::ExpectedSemicolon => "expected semicolon: ;",
+            ParserErrorType::ExpectedSemicolon { after_variable } => {
+                if after_variable {
+                    "expected semicolon after variable declaration: ;"
+                } else {
+                    "expected semicolon: ;"
+                }
+            }
             ParserErrorType::ObjectNeedsIdentifierKeys => "object keys must be identifiers",
             ParserErrorType::UnclosedObject => "unclosed object, expected }",
+            ParserErrorType::ExpectVariableName => "expected variable name after \"var\"",
+            ParserErrorType::ExpectEqualAfterIdentifierInObject => {
+                "expect equal after identifier in object literal, like: { meaning_of_life = 42 }"
+            }
+            ParserErrorType::InvalidAssignmentTarget => "invalid assignment target",
         }
     }
     fn code(&self) -> u32 {
@@ -62,9 +89,12 @@ impl AnkokuError for ParserError {
             ParserErrorType::ExpectedExpression => 2001,
             ParserErrorType::RealParseFailed => 2002,
             ParserErrorType::UnclosedParentheses => 2003,
-            ParserErrorType::ExpectedSemicolon => 2004,
+            ParserErrorType::ExpectedSemicolon { .. } => 2004,
             ParserErrorType::ObjectNeedsIdentifierKeys => 2005,
             ParserErrorType::UnclosedObject => 2006,
+            ParserErrorType::ExpectVariableName => 2007,
+            ParserErrorType::ExpectEqualAfterIdentifierInObject => 2008,
+            ParserErrorType::InvalidAssignmentTarget => 2009,
         }
     }
 
@@ -99,6 +129,37 @@ impl Parser {
 
     // TODO: errors for statements
 
+    pub fn declaration(&mut self) -> ParserResult<Stmt> {
+        if self.mtch(&[TokenType::Var]) {
+            self.var_decl()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn var_decl(&mut self) -> ParserResult<Stmt> {
+        let global = self.parse_variable(ParserErrorType::ExpectVariableName)?;
+        let expr = if self.mtch(&[TokenType::Equal]) {
+            self.expression()
+        } else {
+            Ok(Expr::new(self.peek(), ExprType::Null))
+        }?;
+        self.expect_semi(Stmt::new(StmtType::Var(
+            self.source[global.start..=global.start + global.length - 1]
+                .iter()
+                .collect::<String>(),
+            expr,
+        )))
+    }
+
+    fn parse_variable(&mut self, error: ParserErrorType) -> ParserResult<Token> {
+        if self.peek().kind == TokenType::Identifier {
+            Ok(self.advance())
+        } else {
+            Err(ParserError::new(error, self.peek()))
+        }
+    }
+
     pub fn statement(&mut self) -> ParserResult<Stmt> {
         if self.mtch(&[TokenType::Print]) {
             return self.print_statement();
@@ -112,7 +173,9 @@ impl Parser {
             Ok(a)
         } else {
             Err(ParserError::new(
-                ParserErrorType::ExpectedSemicolon,
+                ParserErrorType::ExpectedSemicolon {
+                    after_variable: false,
+                },
                 self.peek(),
             ))
         }
@@ -131,13 +194,33 @@ impl Parser {
     }
 
     pub fn expression(&mut self) -> ParserResult<Expr> {
-        match self.equality() {
+        match self.assignment() {
             Ok(a) => Ok(a),
             Err(err) => {
                 self.panic_mode = true;
                 Err(err)
             }
         }
+    }
+
+    fn assignment(&mut self) -> ParserResult<Expr> {
+        let expr = self.equality()?;
+
+        if self.mtch(&[TokenType::Equal]) {
+            let equals = self.prev();
+            let value = self.assignment()?;
+
+            if let ExprType::Identifier(name) = expr.kind {
+                return Ok(Expr::new(equals, ExprType::Assign(name, Box::new(value))));
+            }
+
+            return Err(ParserError::new(
+                ParserErrorType::InvalidAssignmentTarget,
+                self.peek(),
+            ));
+        }
+
+        Ok(expr)
     }
 
     pub fn equality(&mut self) -> ParserResult<Expr> {
@@ -192,6 +275,12 @@ impl Parser {
         self.primary()
     }
     pub fn primary(&mut self) -> ParserResult<Expr> {
+        if self.mtch(&[TokenType::Identifier]) {
+            let name = self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
+                .iter()
+                .collect::<String>(); // TODO: implement string interner for this, not sure how it will work since UTF-32 &[char] != UTF-8 String
+            return Ok(Expr::new(self.prev(), ExprType::Identifier(Rc::new(name))));
+        }
         if self.mtch(&[TokenType::False]) {
             return Ok(Expr::new(self.prev(), ExprType::Bool(false)));
         }
@@ -244,6 +333,31 @@ impl Parser {
             Err(ParserError::new(error, self.peek()))
         }
     }
+
+    fn synchronize(&mut self) {
+        self.panic_mode = false;
+        while self.peek().kind != TokenType::EOF {
+            if self.current > 0 && self.prev().kind == TokenType::Semicolon {
+                return;
+            }
+
+            match self.peek().kind {
+                TokenType::Class
+                | TokenType::Fn
+                | TokenType::Var
+                | TokenType::For
+                | TokenType::If
+                | TokenType::While
+                | TokenType::Print
+                | TokenType::Return => {
+                    return;
+                }
+                _ => {}
+            }
+
+            self.advance();
+        }
+    }
     fn object(&mut self) -> ParserResult<Expr> {
         let mut pairs = Vec::new();
         let start = self.prev();
@@ -261,7 +375,10 @@ impl Parser {
                     .iter()
                     .collect::<String>()
             );
-            self.consume(TokenType::Equal, ParserErrorType::ExpectedExpression)?; // FIXME: create new error type for this
+            self.consume(
+                TokenType::Equal,
+                ParserErrorType::ExpectEqualAfterIdentifierInObject,
+            )?;
             let value = self.expression()?;
 
             pairs.push((key, Box::new(value)));

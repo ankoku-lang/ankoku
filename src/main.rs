@@ -1,8 +1,10 @@
+#![cfg(feature = "cli")]
 use std::process::exit;
 
 use ankoku::{
     compiler::Compiler,
-    parser::{expr::Expr, stmt::Stmt, tokenizer::Tokenizer},
+    parser::{stmt::Stmt, tokenizer::Tokenizer},
+    util::error::{cli::CLIErrorReporter, ErrorReporter},
     vm::{instruction::Instruction, VM},
 };
 
@@ -19,7 +21,13 @@ fn main() {
         .map(|v| v.unwrap())
         .collect::<Vec<_>>();
 
-    let ast = Stmt::parse(tokens, source.chars().collect()).expect("parse error");
+    let (ast, errors) = Stmt::parse(tokens, source.chars().collect());
+    if errors.len() > 0 {
+        let reporter = CLIErrorReporter;
+        for err in errors {
+            reporter.report(err);
+        }
+    }
     let mut vm = VM::new();
     let mut compiled = Compiler::compile(&ast, &vm);
     compiled.disassemble("compiled");

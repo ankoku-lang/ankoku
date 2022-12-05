@@ -26,9 +26,13 @@ impl HashTable {
     }
 
     pub fn values(&self) -> impl Iterator<Item = &Value> {
-        self.entries
-            .iter()
-            .filter_map(|v| if v.key != None { Some(&v.value) } else { None })
+        self.entries.iter().filter_map(|v| {
+            if v.key.is_some() {
+                Some(&v.value)
+            } else {
+                None
+            }
+        })
     }
 
     pub fn entries(&self) -> impl Iterator<Item = (&AnkokuString, &Value)> {
@@ -51,13 +55,13 @@ impl HashTable {
         let mut tombstone: Option<usize> = None;
         loop {
             entry = &entries[index];
-            if entry.key == None {
+            if entry.key.is_none() {
                 if entry.value == Value::Null {
                     // Empty entry.
                     return if let Some(t) = tombstone { t } else { index };
                 } else {
                     // We found a tombstone.
-                    if tombstone == None {
+                    if tombstone.is_none() {
                         tombstone = Some(index);
                     }
                 }
@@ -74,9 +78,7 @@ impl HashTable {
             None
         } else {
             let entry = &self.entries[HashTable::find_entry(&self.entries, key.hash())];
-            if entry.key == None {
-                return None;
-            }
+            entry.key.as_ref()?;
             Some(&entry.value)
         }
     }
@@ -99,7 +101,7 @@ impl HashTable {
 
             for i in 0..self.entries.len() {
                 let entry = &self.entries[i];
-                if entry.key == None {
+                if entry.key.is_none() {
                     continue;
                 }
                 let dest = HashTable::find_entry(&entries, entry.key.as_ref().unwrap().hash());
@@ -111,7 +113,7 @@ impl HashTable {
             self.entries = entries;
         }
         let entry = HashTable::find_entry(&self.entries, key.hash());
-        let is_new_key = self.entries[entry].key == None;
+        let is_new_key = self.entries[entry].key.is_none();
         if is_new_key {
             self.count += 1;
         }
@@ -135,7 +137,7 @@ impl HashTable {
             false
         } else {
             let entry = HashTable::find_entry(&self.entries, key);
-            if self.entries[entry].key == None {
+            if self.entries[entry].key.is_none() {
                 return false;
             }
             self.entries[entry].key = None;
