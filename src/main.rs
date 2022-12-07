@@ -1,3 +1,4 @@
+// TODO: flesh this out, probably move to separate crate
 #[cfg(feature = "cli")]
 fn main() {
     use std::process::exit;
@@ -25,8 +26,11 @@ fn main() {
     if !errors.is_empty() {
         let reporter = CLIErrorReporter;
         for err in errors {
+            #[cfg(feature = "debug-mode")]
+            println!("{:?}", err);
             reporter.report(err);
         }
+        return;
     }
     let mut vm = VM::new();
     let mut compiled = Compiler::compile(&ast, &vm);
@@ -36,4 +40,6 @@ fn main() {
 }
 
 #[cfg(not(feature = "cli"))]
-fn main() {}
+fn main() {
+    println!("must build with feature 'cli' to build the cli");
+}

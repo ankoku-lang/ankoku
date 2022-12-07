@@ -9,6 +9,8 @@ use std::{
     rc::Rc,
 };
 
+use once_cell::unsync::OnceCell;
+
 use crate::{
     parser::expr::{Expr, ExprType},
     parser::tokenizer::{Token, TokenType},
@@ -21,13 +23,19 @@ pub struct ParserError {
     pub kind: ParserErrorType,
     pub token: Token,
     pub internal_bt: Backtrace,
+    pub line: String,
+    pub line_num: u32,
+    pub col: usize,
 }
 impl ParserError {
-    pub fn new(kind: ParserErrorType, token: Token) -> Self {
+    pub fn new(kind: ParserErrorType, token: Token, line: String, line_col: (u32, usize)) -> Self {
         ParserError {
             kind,
             token,
             internal_bt: Backtrace::capture(),
+            line,
+            line_num: line_col.0,
+            col: line_col.1,
         }
     }
 }
@@ -99,7 +107,7 @@ impl AnkokuError for ParserError {
     }
 
     fn line_col(&self) -> Option<(u32, usize, &str)> {
-        None
+        Some((self.line_num, self.col, &self.line))
     }
 
     fn filename(&self) -> Option<&str> {
@@ -115,6 +123,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     current: usize,
     panic_mode: bool, // TODO
+    source_string: OnceCell<String>,
 }
 
 impl Parser {
@@ -124,11 +133,50 @@ impl Parser {
             source,
             current: 0,
             panic_mode: false,
+            source_string: OnceCell::new(),
         }
     }
 
-    // TODO: errors for statements
+    fn idx_to_pos(&self, idx: usize) -> (u32, usize) {
+        let mut col = 0;
+        let mut lines = 0;
+        for i in 0..idx {
+            if self.source[i] == '\n' {
+                lines += 1;
+                col = 0;
+                continue;
+            }
+            col += 1;
+        }
+        (lines + 1, col + 1)
+    }
 
+    fn get_line(&self, line_num: u32) -> String {
+        assert!(line_num >= 1);
+        let mut lines = self
+            .source_string
+            .get_or_init(|| String::from_iter(&self.source))
+            .lines();
+
+        lines
+            .nth((line_num - 1) as usize)
+            .expect("failed to get line")
+            .to_string()
+    }
+
+    fn new_err(&self, kind: ParserErrorType, token: Token) -> ParserError {
+        println!("{:?}", token);
+        if token.kind == TokenType::EOF {
+            ParserError::new(kind, token, "EOF".into(), (1, 1))
+        } else {
+            ParserError::new(
+                kind,
+                token,
+                self.get_line(self.idx_to_pos(token.start).0),
+                self.idx_to_pos(token.start),
+            )
+        }
+    }
     pub fn declaration(&mut self) -> ParserResult<Stmt> {
         if self.mtch(&[TokenType::Var]) {
             self.var_decl()
@@ -156,7 +204,7 @@ impl Parser {
         if self.peek().kind == TokenType::Identifier {
             Ok(self.advance())
         } else {
-            Err(ParserError::new(error, self.peek()))
+            Err(self.new_err(error, self.peek()))
         }
     }
 
@@ -172,7 +220,7 @@ impl Parser {
             self.advance();
             Ok(a)
         } else {
-            Err(ParserError::new(
+            Err(self.new_err(
                 ParserErrorType::ExpectedSemicolon {
                     after_variable: false,
                 },
@@ -214,10 +262,7 @@ impl Parser {
                 return Ok(Expr::new(equals, ExprType::Assign(name, Box::new(value))));
             }
 
-            return Err(ParserError::new(
-                ParserErrorType::InvalidAssignmentTarget,
-                self.peek(),
-            ));
+            return Err(self.new_err(ParserErrorType::InvalidAssignmentTarget, self.peek()));
         }
 
         Ok(expr)
@@ -295,25 +340,28 @@ impl Parser {
                 .iter()
                 .collect::<String>();
 
+            if self.mtch(&[TokenType::Dot]) {
+                return Err(self.new_err(ParserErrorType::RealParseFailed, self.prev()));
+            }
+
             return Ok(Expr::new(
                 self.prev(),
-                ExprType::Real(a.parse::<f64>().map_err(|_| {
-                    ParserError::new(ParserErrorType::RealParseFailed, self.prev())
-                })?),
+                ExprType::Real(
+                    a.parse::<f64>()
+                        .map_err(|_| self.new_err(ParserErrorType::RealParseFailed, self.prev()))?,
+                ),
             ));
         }
         // TODO: string self.source[self.start + 1..=self.current - 2].iter().collect()
 
         if self.mtch(&[TokenType::LParen]) {
             let expr = self.expression()?;
+            println!("{:?}", expr);
             if self.peek().kind == TokenType::RParen {
                 self.advance();
                 return Ok(Expr::new(self.prev(), ExprType::Grouping(Box::new(expr))));
             } else {
-                return Err(ParserError::new(
-                    ParserErrorType::UnclosedParentheses,
-                    self.peek(),
-                ));
+                return Err(self.new_err(ParserErrorType::UnclosedParentheses, self.peek()));
             }
         }
 
@@ -321,16 +369,13 @@ impl Parser {
             return self.object();
         }
 
-        Err(ParserError::new(
-            ParserErrorType::ExpectedExpression,
-            self.peek(),
-        ))
+        Err(self.new_err(ParserErrorType::ExpectedExpression, self.peek()))
     }
     fn consume(&mut self, expect: TokenType, error: ParserErrorType) -> ParserResult<Token> {
         if self.peek().kind == expect {
             Ok(self.advance())
         } else {
-            Err(ParserError::new(error, self.peek()))
+            Err(self.new_err(error, self.peek()))
         }
     }
 
@@ -390,10 +435,7 @@ impl Parser {
                 self.advance();
                 continue;
             } else {
-                return Err(ParserError::new(
-                    ParserErrorType::UnclosedObject,
-                    self.peek(),
-                ));
+                return Err(self.new_err(ParserErrorType::UnclosedObject, self.peek()));
             }
         }
     }

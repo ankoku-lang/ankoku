@@ -67,6 +67,8 @@ pub mod cli {
                     );
                     println!("{} {}", "      |".bold().bright_cyan(), bottom_highlight());
                 }
+            } else {
+                println!("error has no line");
             }
         }
     }
