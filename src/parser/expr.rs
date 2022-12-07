@@ -14,6 +14,7 @@ pub enum ExprType {
     Real(f64),
     Bool(bool),
     Null,
+    String(Rc<String>),
     // Binary operations
     Add(Box<Expr>, Box<Expr>),
     Subtract(Box<Expr>, Box<Expr>),
@@ -61,6 +62,7 @@ impl Display for Expr {
             ExprType::Object(table) => write!(f, "{:?}", table),
             ExprType::Identifier(v) => write!(f, "(get {})", v),
             ExprType::Assign(name, value) => write!(f, "(set {} to {:?})", name, value),
+            ExprType::String(a) => write!(f, "({:?})", a),
         }
     }
 }

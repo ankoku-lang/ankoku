@@ -10,7 +10,7 @@ pub enum Instruction {
     Div = 7,
     Not = 8,
     Pop = 9,
-    NewObject = 10, // TODO: rip out and replace with something more OOPy maybe or not idk
+    NewObject = 10, // TODO: this should have a type when classes implemented
     ObjectSet = 11,
     DefineGlobal = 12,
     GetGlobal = 13,

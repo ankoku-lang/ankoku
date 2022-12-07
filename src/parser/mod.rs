@@ -122,7 +122,7 @@ pub struct Parser {
     source: Vec<char>,
     tokens: Vec<Token>,
     current: usize,
-    panic_mode: bool, // TODO
+    panic_mode: bool,
     source_string: OnceCell<String>,
 }
 
@@ -352,7 +352,18 @@ impl Parser {
                 ),
             ));
         }
-        // TODO: string self.source[self.start + 1..=self.current - 2].iter().collect()
+
+        if self.mtch(&[TokenType::String]) {
+            let a = self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
+                .iter()
+                .collect::<String>();
+
+            if self.mtch(&[TokenType::Dot]) {
+                return Err(self.new_err(ParserErrorType::RealParseFailed, self.prev()));
+            }
+
+            return Ok(Expr::new(self.prev(), ExprType::String(Rc::new(a)))); // maybe intern these i don't know
+        }
 
         if self.mtch(&[TokenType::LParen]) {
             let expr = self.expression()?;

@@ -142,7 +142,7 @@ impl AstVisitor<(), ()> for Compiler {
             }
             ExprType::Identifier(s) => {
                 let constant = self.get_constant(Value::Obj(
-                    vm.alloc(Obj::new(ObjType::String(AnkokuString::new(s.to_string())))),
+                    vm.alloc(Obj::new(ObjType::String(AnkokuString::new(s.to_string())))), // intern this too
                 ));
 
                 write_byte!(Instruction::GetGlobal.into());
@@ -156,6 +156,11 @@ impl AstVisitor<(), ()> for Compiler {
 
                 write_byte!(Instruction::SetGlobal.into());
                 write_byte!(constant as u8);
+            }
+            ExprType::String(s) => {
+                self.write_constant(Value::Obj(
+                    vm.alloc(Obj::new(ObjType::String(AnkokuString::new(s.to_string())))), // intern this too
+                ));
             }
         };
     }
@@ -182,9 +187,9 @@ mod tests {
 
     fn parse_stmts_unwrap<S: AsRef<str>>(source: S) -> Vec<Stmt> {
         let (stmts, errors) = parse_stmts(source);
-        if errors.len() > 0 {
+        if !errors.is_empty() {
             for err in errors {
-                println!("{:?}", err); // TODO: use proper reporter
+                println!("{:?}", err);
             }
             panic!("errors; see stdout")
         } else {

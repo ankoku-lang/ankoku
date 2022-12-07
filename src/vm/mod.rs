@@ -274,6 +274,10 @@ impl VM {
             self.mark(slot);
         }
 
+        for value in self.globals.values() {
+            self.mark(value);
+        }
+
         // TODO: when global variables implemented, mark those and the call frames and upvalues and compiler? https://craftinginterpreters.com/garbage-collection.html#less-obvious-roots
     }
 
