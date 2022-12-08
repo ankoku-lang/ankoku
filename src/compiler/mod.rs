@@ -136,7 +136,6 @@ impl AstVisitor<(), ()> for Compiler {
                         AnkokuString::new(key.to_string()),
                     )))));
                     self.visit_node(value, vm);
-                    println!("{:?}", Instruction::ObjectSet);
                     write_byte!(Instruction::ObjectSet.into());
                 }
             }

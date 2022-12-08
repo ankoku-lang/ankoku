@@ -1,5 +1,7 @@
 # ankoku
 
+<img src="ankoku-logo.png" alt="drawing" width="200"/>
+
 [![Rust CI](https://github.com/ankoku-lang/ankoku/actions/workflows/ci.yml/badge.svg)](https://github.com/ankoku-lang/ankoku/actions/workflows/ci.yml)
 
 Ankoku is a small scripting language written in Rust, designed for performance, expressiveness, and ease of embedding.

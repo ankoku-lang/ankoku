@@ -1,4 +1,4 @@
-use super::{expr::Expr, tokenizer::Token, Parser, ParserError, ParserResult};
+use super::{expr::Expr, tokenizer::Token, Parser, ParserError};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stmt {

@@ -165,7 +165,6 @@ impl Parser {
     }
 
     fn new_err(&self, kind: ParserErrorType, token: Token) -> ParserError {
-        println!("{:?}", token);
         if token.kind == TokenType::EOF {
             ParserError::new(kind, token, "EOF".into(), (1, 1))
         } else {
@@ -367,7 +366,6 @@ impl Parser {
 
         if self.mtch(&[TokenType::LParen]) {
             let expr = self.expression()?;
-            println!("{:?}", expr);
             if self.peek().kind == TokenType::RParen {
                 self.advance();
                 return Ok(Expr::new(self.prev(), ExprType::Grouping(Box::new(expr))));

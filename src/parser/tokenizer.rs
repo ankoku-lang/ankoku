@@ -242,6 +242,7 @@ impl Tokenizer {
 
         Err(self.new_err(TokenizerErrorType::UnexpectedCharacter))
     }
+
     fn get_line(&self, line_num: u32) -> String {
         assert!(line_num >= 1);
         let mut lines = self
@@ -255,17 +256,17 @@ impl Tokenizer {
             .to_string()
     }
     fn idx_to_pos(&self, idx: usize) -> (u32, usize) {
-        let mut chars = 0;
+        let mut col = 0;
         let mut lines = 0;
-        for _i in 0..idx {
-            let mut j = 0;
-            while self.source[j] != '\n' {
-                j += 1;
+        for i in 0..idx {
+            if self.source[i] == '\n' {
+                lines += 1;
+                col = 0;
+                continue;
             }
-            chars += j;
-            lines += 1;
+            col += 1;
         }
-        (lines + 1, (chars - idx) + 1)
+        (lines + 1, col + 1)
     }
 
     fn new_err(&self, kind: TokenizerErrorType) -> TokenizerError {
