@@ -31,4 +31,5 @@ pub enum StmtType {
     Print(Expr),
     Expr(Expr),
     Var(String, Expr),
+    Block(Vec<Stmt>),
 }

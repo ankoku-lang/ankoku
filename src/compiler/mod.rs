@@ -15,15 +15,24 @@ use crate::{
     },
 };
 
+struct Local {
+    name: String,
+    depth: usize,
+}
+
 pub struct Compiler {
     chunk: Chunk,
     constant_pool: FxHashMap<Value, usize>,
+    scope_depth: usize,
+    locals: Vec<Local>,
 }
 impl Compiler {
     pub fn compile(stmts: &[Stmt], vm: &VM) -> Chunk {
         let mut compiler = Compiler {
             chunk: Chunk::new(),
             constant_pool: HashMap::default(),
+            scope_depth: 0,
+            locals: Vec::new(),
         };
         for stmt in stmts {
             compiler.visit_stmt(stmt, vm);
@@ -50,6 +59,48 @@ impl Compiler {
         self.chunk
             .write(constant as u8, self.chunk.last_byte_line());
     }
+
+    fn begin_scope(&mut self) {
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self) {
+        self.scope_depth -= 1;
+
+        while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth
+        {
+            self.chunk
+                .write(Instruction::Pop.into(), self.chunk.last_byte_line());
+            self.locals.pop();
+        }
+        for local in &self.locals {
+            debug_assert!(
+                local.depth <= self.scope_depth,
+                "{} {}",
+                local.depth,
+                self.scope_depth
+            );
+        }
+    }
+
+    fn add_local<S: Into<String>>(&mut self, name: S) {
+        if self.locals.len() > u8::MAX as usize {
+            panic!("too many locals in function") // TODO: compiler errors
+        }
+        self.locals.push(Local {
+            name: name.into(),
+            depth: self.scope_depth,
+        });
+    }
+    fn resolve_local(&self, name: &str) -> Option<usize> {
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            println!("i = {}, {:?}, {:?}", i, local.name, local.depth);
+            if local.name == name {
+                return Some(i);
+            }
+        }
+        None
+    }
 }
 impl AstVisitor<(), ()> for Compiler {
     fn visit_stmt(&mut self, stmt: &Stmt, vm: &VM) {
@@ -70,11 +121,31 @@ impl AstVisitor<(), ()> for Compiler {
             }
             StmtType::Var(name, value) => {
                 self.visit_node(value, vm);
-                let constant = self.get_constant(Value::Obj(
-                    vm.alloc(Obj::new(ObjType::String(AnkokuString::new(name.clone())))),
-                ));
-                write_byte!(Instruction::DefineGlobal.into());
-                write_byte!(constant as u8);
+                if self.scope_depth == 0 {
+                    let constant = self.get_constant(Value::Obj(
+                        vm.alloc(Obj::new(ObjType::String(AnkokuString::new(name.clone())))),
+                    ));
+                    write_byte!(Instruction::DefineGlobal.into());
+                    write_byte!(constant as u8);
+                } else {
+                    for local in self.locals.iter().rev() {
+                        if local.depth < self.scope_depth {
+                            break;
+                        }
+
+                        if *name == local.name {
+                            panic!("already variable named {:?} in this scope", name);
+                        }
+                    }
+                    self.add_local(name);
+                }
+            }
+            StmtType::Block(block) => {
+                self.begin_scope();
+                for b in block {
+                    self.visit_stmt(b, vm);
+                }
+                self.end_scope();
             }
         }
     }
@@ -139,22 +210,33 @@ impl AstVisitor<(), ()> for Compiler {
                     write_byte!(Instruction::ObjectSet.into());
                 }
             }
-            ExprType::Identifier(s) => {
-                let constant = self.get_constant(Value::Obj(
-                    vm.alloc(Obj::new(ObjType::String(AnkokuString::new(s.to_string())))), // intern this too
-                ));
+            ExprType::Var(s) => {
+                if let Some(local) = self.resolve_local(s) {
+                    write_byte!(Instruction::GetLocal.into());
+                    write_byte!(local as u8);
+                } else {
+                    let constant = self.get_constant(Value::Obj(
+                        vm.alloc(Obj::new(ObjType::String(AnkokuString::new(s.to_string())))), // intern this too
+                    ));
 
-                write_byte!(Instruction::GetGlobal.into());
-                write_byte!(constant as u8);
+                    write_byte!(Instruction::GetGlobal.into());
+                    write_byte!(constant as u8);
+                }
             }
             ExprType::Assign(name, value) => {
                 self.visit_node(value, vm);
-                let constant = self.get_constant(Value::Obj(vm.alloc(Obj::new(ObjType::String(
-                    AnkokuString::new(name.to_string()),
-                )))));
 
-                write_byte!(Instruction::SetGlobal.into());
-                write_byte!(constant as u8);
+                if let Some(local) = self.resolve_local(name) {
+                    write_byte!(Instruction::SetLocal.into());
+                    write_byte!(local as u8);
+                } else {
+                    let constant = self.get_constant(Value::Obj(vm.alloc(Obj::new(
+                        ObjType::String(AnkokuString::new(name.to_string())),
+                    ))));
+
+                    write_byte!(Instruction::SetGlobal.into());
+                    write_byte!(constant as u8);
+                }
             }
             ExprType::String(s) => {
                 self.write_constant(Value::Obj(

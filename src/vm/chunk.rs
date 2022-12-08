@@ -61,6 +61,10 @@ impl Chunk {
                 println!("{:?}", instruction);
                 offset + 1
             }
+            Instruction::GetLocal | Instruction::SetLocal => {
+                println!("{:?} {}", instruction, self.code[offset + 1],);
+                offset + 2
+            }
             Instruction::DefineGlobal
             | Instruction::GetGlobal
             | Instruction::SetGlobal

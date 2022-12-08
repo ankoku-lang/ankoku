@@ -69,6 +69,7 @@ pub enum ParserErrorType {
     ExpectVariableName,
     ExpectEqualAfterIdentifierInObject,
     InvalidAssignmentTarget,
+    UnclosedBlock,
 }
 impl AnkokuError for ParserError {
     fn msg(&self) -> &str {
@@ -90,6 +91,7 @@ impl AnkokuError for ParserError {
                 "expect equal after identifier in object literal, like: { meaning_of_life = 42 }"
             }
             ParserErrorType::InvalidAssignmentTarget => "invalid assignment target",
+            ParserErrorType::UnclosedBlock => "unclosed block, expected }",
         }
     }
     fn code(&self) -> u32 {
@@ -103,6 +105,7 @@ impl AnkokuError for ParserError {
             ParserErrorType::ExpectVariableName => 2007,
             ParserErrorType::ExpectEqualAfterIdentifierInObject => 2008,
             ParserErrorType::InvalidAssignmentTarget => 2009,
+            ParserErrorType::UnclosedBlock => 2010,
         }
     }
 
@@ -209,9 +212,18 @@ impl Parser {
 
     pub fn statement(&mut self) -> ParserResult<Stmt> {
         if self.mtch(&[TokenType::Print]) {
-            return self.print_statement();
+            self.print_statement()
+        } else if self.mtch(&[TokenType::LBrace]) {
+            let mut stmts = vec![];
+            while !self.at_end() && !self.check(TokenType::RBrace) {
+                let stmt = self.declaration()?; // TODO: better error handling here, this only has the first error
+                stmts.push(stmt);
+            }
+            self.consume(TokenType::RBrace, ParserErrorType::UnclosedBlock)?;
+            Ok(Stmt::new(StmtType::Block(stmts)))
+        } else {
+            self.expression_statement()
         }
-        self.expression_statement()
     }
 
     fn expect_semi<T>(&mut self, a: T) -> ParserResult<T> {
@@ -257,7 +269,7 @@ impl Parser {
             let equals = self.prev();
             let value = self.assignment()?;
 
-            if let ExprType::Identifier(name) = expr.kind {
+            if let ExprType::Var(name) = expr.kind {
                 return Ok(Expr::new(equals, ExprType::Assign(name, Box::new(value))));
             }
 
@@ -323,7 +335,7 @@ impl Parser {
             let name = self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
                 .iter()
                 .collect::<String>(); // TODO: implement string interner for this, not sure how it will work since UTF-32 &[char] != UTF-8 String
-            return Ok(Expr::new(self.prev(), ExprType::Identifier(Rc::new(name))));
+            return Ok(Expr::new(self.prev(), ExprType::Var(Rc::new(name))));
         }
         if self.mtch(&[TokenType::False]) {
             return Ok(Expr::new(self.prev(), ExprType::Bool(false)));
@@ -353,7 +365,7 @@ impl Parser {
         }
 
         if self.mtch(&[TokenType::String]) {
-            let a = self.source[self.prev().start..=self.prev().start + self.prev().length - 1]
+            let a = self.source[self.prev().start + 1..=self.prev().start + self.prev().length - 2]
                 .iter()
                 .collect::<String>();
 

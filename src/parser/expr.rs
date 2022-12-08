@@ -26,7 +26,7 @@ pub enum ExprType {
     // Other
     Grouping(Box<Expr>),
     Object(Vec<(String, Box<Expr>)>),
-    Identifier(Rc<String>),
+    Var(Rc<String>),
     Assign(Rc<String>, Box<Expr>),
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -60,7 +60,7 @@ impl Display for Expr {
             ExprType::Not(inner) => write!(f, "(! {})", inner),
             ExprType::Grouping(inner) => write!(f, "{}", inner),
             ExprType::Object(table) => write!(f, "{:?}", table),
-            ExprType::Identifier(v) => write!(f, "(get {})", v),
+            ExprType::Var(v) => write!(f, "(get {})", v),
             ExprType::Assign(name, value) => write!(f, "(set {} to {:?})", name, value),
             ExprType::String(a) => write!(f, "({:?})", a),
         }

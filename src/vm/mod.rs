@@ -235,6 +235,16 @@ impl VM {
                         self.type_error(RuntimeType::String, TypeErrorType::GlobalNameMustBeString);
                     }
                 }
+                // GetLocal
+                15 => {
+                    let slot = read_byte!();
+                    self.stack_push(self.stack[slot as usize].clone());
+                }
+                // GetLocal
+                16 => {
+                    let slot = read_byte!();
+                    self.stack[slot as usize] = self.stack[self.stack.len() - 1].clone();
+                }
                 _ => unimplemented!(),
             }
         }
