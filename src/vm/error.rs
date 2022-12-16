@@ -20,6 +20,8 @@ pub enum RuntimeErrorType {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeErrorType {
     GlobalNameMustBeString,
+    ObjectSetMustBeObject,
+    KeyMustBeString,
 }
 // TODO: proper type system
 #[allow(dead_code)] // for now

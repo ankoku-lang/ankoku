@@ -55,7 +55,9 @@ impl VM {
     }
 
     pub(crate) fn stack_pop(&mut self) -> Value {
-        self.stack.pop().expect("nothing to pop")
+        self.stack
+            .pop()
+            .unwrap_or_else(|| panic!("nothing to pop: {:?}", self.ip))
     }
 
     pub(crate) fn stack_peek(&mut self) -> &Value {
@@ -75,6 +77,17 @@ impl VM {
             () => {
                 self.chunk.constants[read_byte!() as usize].clone()
             };
+        }
+
+        macro_rules! read_u32 {
+            () => {{
+                let a = read_byte!();
+                let b = read_byte!();
+                let c = read_byte!();
+                let d = read_byte!();
+
+                ((a as usize) << 24) | ((b as usize) << 16) | ((c as usize) << 8) | (d as usize)
+            }};
         }
 
         loop {
@@ -162,16 +175,22 @@ impl VM {
                                 if let ObjType::Object(o) = &mut o.deref_mut().kind {
                                     o.table.set(key.clone(), value);
                                 } else {
-                                    todo!()
+                                    self.type_error(
+                                        RuntimeType::Object,
+                                        TypeErrorType::ObjectSetMustBeObject,
+                                    );
                                 }
                             } else {
-                                todo!()
+                                self.type_error(
+                                    RuntimeType::Object,
+                                    TypeErrorType::ObjectSetMustBeObject,
+                                );
                             }
                         } else {
-                            todo!()
+                            self.type_error(RuntimeType::String, TypeErrorType::KeyMustBeString);
                         }
                     } else {
-                        todo!()
+                        self.type_error(RuntimeType::String, TypeErrorType::KeyMustBeString);
                     }
                 }
                 // DefineGlobal
@@ -245,7 +264,20 @@ impl VM {
                     let slot = read_byte!();
                     self.stack[slot as usize] = self.stack[self.stack.len() - 1].clone();
                 }
-                _ => unimplemented!(),
+                // JumpIfFalse
+                17 => {
+                    let to = read_u32!();
+                    let cond = self.stack_peek();
+                    if cond.falsey() {
+                        self.ip = to;
+                    }
+                }
+                // Jump
+                18 => {
+                    let to = read_u32!();
+                    self.ip = to;
+                }
+                _ => unimplemented!("instruction {}", instruction),
             }
         }
     }

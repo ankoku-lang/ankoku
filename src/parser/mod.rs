@@ -70,6 +70,7 @@ pub enum ParserErrorType {
     ExpectEqualAfterIdentifierInObject,
     InvalidAssignmentTarget,
     UnclosedBlock,
+    ExpectedParenIf { before: bool },
 }
 impl AnkokuError for ParserError {
     fn msg(&self) -> &str {
@@ -92,6 +93,12 @@ impl AnkokuError for ParserError {
             }
             ParserErrorType::InvalidAssignmentTarget => "invalid assignment target",
             ParserErrorType::UnclosedBlock => "unclosed block, expected }",
+            ParserErrorType::ExpectedParenIf { before: true } => {
+                "expected paren after \"if\" keyword"
+            }
+            ParserErrorType::ExpectedParenIf { before: false } => {
+                "expected paren after if condition"
+            }
         }
     }
     fn code(&self) -> u32 {
@@ -106,6 +113,7 @@ impl AnkokuError for ParserError {
             ParserErrorType::ExpectEqualAfterIdentifierInObject => 2008,
             ParserErrorType::InvalidAssignmentTarget => 2009,
             ParserErrorType::UnclosedBlock => 2010,
+            ParserErrorType::ExpectedParenIf { .. } => 2011,
         }
     }
 
@@ -213,6 +221,28 @@ impl Parser {
     pub fn statement(&mut self) -> ParserResult<Stmt> {
         if self.mtch(&[TokenType::Print]) {
             self.print_statement()
+        } else if self.mtch(&[TokenType::If]) {
+            self.consume(
+                TokenType::LParen,
+                ParserErrorType::ExpectedParenIf { before: true },
+            )?;
+            let condition = self.expression()?;
+            self.consume(
+                TokenType::RParen,
+                ParserErrorType::ExpectedParenIf { before: false },
+            )?;
+            let body = self.statement()?;
+            let else_body = if self.mtch(&[TokenType::Else]) {
+                Some(Box::new(self.statement()?))
+            } else {
+                None
+            };
+
+            Ok(Stmt::new(StmtType::If(
+                condition,
+                Box::new(body),
+                else_body,
+            )))
         } else if self.mtch(&[TokenType::LBrace]) {
             let mut stmts = vec![];
             while !self.at_end() && !self.check(TokenType::RBrace) {

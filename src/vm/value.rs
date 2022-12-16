@@ -122,6 +122,15 @@ impl Value {
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
+
+    pub fn falsey(&self) -> bool {
+        match self {
+            Value::Bool(b) => !*b,
+            Value::Null => true,
+            Value::Real(b) => *b != 0.0,
+            Value::Obj(o) => true,
+        }
+    }
 }
 
 impl Debug for Value {

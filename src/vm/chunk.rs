@@ -65,6 +65,18 @@ impl Chunk {
                 println!("{:?} {}", instruction, self.code[offset + 1],);
                 offset + 2
             }
+            // one 32-bit operand
+            Instruction::JumpIfFalse | Instruction::Jump => {
+                println!(
+                    "{:?} {}",
+                    instruction,
+                    ((self.code[offset + 1] as usize) << 24)
+                        | ((self.code[offset + 2] as usize) << 16)
+                        | ((self.code[offset + 3] as usize) << 8)
+                        | (self.code[offset + 4] as usize)
+                );
+                offset + 5
+            }
             Instruction::DefineGlobal
             | Instruction::GetGlobal
             | Instruction::SetGlobal

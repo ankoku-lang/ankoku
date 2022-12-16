@@ -17,6 +17,8 @@ pub enum Instruction {
     SetGlobal = 14,
     GetLocal = 15,
     SetLocal = 16,
+    JumpIfFalse = 17,
+    Jump = 18,
     Print = 100, // FIXME: TEMP, will be removed when functions work
 }
 
@@ -41,6 +43,8 @@ impl From<u8> for Instruction {
             14 => SetGlobal,
             15 => GetLocal,
             16 => SetLocal,
+            17 => JumpIfFalse,
+            18 => Jump,
             100 => Print,
             _ => panic!("not an instruction: {:?}", v),
         }

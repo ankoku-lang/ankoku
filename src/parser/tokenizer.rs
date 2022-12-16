@@ -339,11 +339,25 @@ impl Tokenizer {
             if self.peek().unwrap() == '\n' {
                 self.line += 1;
             }
+            // line comments (// comment)
             if self.peek().unwrap() == '/' && self.peek_next() == Some('/') {
                 while !self.peek().map_or(true, |v| v == '\n') {
                     self.advance();
                 }
-            } else if self.peek().unwrap() == '/' {
+            }
+            // block comments (/* comment */)
+            else if self.peek().unwrap() == '/' && self.peek_next() == Some('*') {
+                self.advance();
+                self.advance();
+                while !self.peek().map_or(true, |v| v == '*')
+                    && !self.peek_next().map_or(true, |v| v == '/')
+                {
+                    self.advance();
+                }
+                self.advance();
+            }
+            // regular old slash
+            else if self.peek().unwrap() == '/' {
                 return;
             }
             if !self.at_end() {

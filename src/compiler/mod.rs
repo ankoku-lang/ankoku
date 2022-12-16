@@ -101,6 +101,33 @@ impl Compiler {
         }
         None
     }
+
+    fn emit_jump(&mut self, instruction: Instruction) -> usize {
+        self.chunk
+            .write(instruction.into(), self.chunk.last_byte_line());
+
+        // Jump instructions all take a 32 bit uint
+
+        self.chunk.write(0xFF, self.chunk.last_byte_line());
+        self.chunk.write(0xFF, self.chunk.last_byte_line());
+        self.chunk.write(0xFF, self.chunk.last_byte_line());
+        self.chunk.write(0xFF, self.chunk.last_byte_line());
+
+        self.chunk.code.len() - 4
+    }
+
+    fn patch_jump(&mut self, jmp_offset: usize) {
+        let jump = self.chunk.code.len(); // TODO: WHY IS THIS BROKEN??!
+
+        if jump > u32::MAX as usize {
+            panic!("Too much code to jump over.");
+        }
+
+        self.chunk.code[jmp_offset] = ((jump >> 24) & 0xff) as u8;
+        self.chunk.code[jmp_offset + 1] = ((jump >> 16) & 0xff) as u8;
+        self.chunk.code[jmp_offset + 2] = ((jump >> 8) & 0xff) as u8;
+        self.chunk.code[jmp_offset + 3] = (jump & 0xff) as u8;
+    }
 }
 impl AstVisitor<(), ()> for Compiler {
     fn visit_stmt(&mut self, stmt: &Stmt, vm: &VM) {
@@ -147,6 +174,24 @@ impl AstVisitor<(), ()> for Compiler {
                 }
                 self.end_scope();
             }
+            StmtType::If(condition, body, else_body) => {
+                self.visit_node(condition, vm);
+
+                let jump = self.emit_jump(Instruction::JumpIfFalse);
+
+                write_byte!(Instruction::Pop.into());
+
+                self.visit_stmt(body, vm);
+
+                let else_jump = self.emit_jump(Instruction::Jump);
+
+                self.patch_jump(jump);
+                write_byte!(Instruction::Pop.into());
+                if let Some(else_body) = else_body {
+                    self.visit_stmt(else_body, vm);
+                }
+                self.patch_jump(else_jump);
+            }
         }
     }
 
@@ -160,7 +205,9 @@ impl AstVisitor<(), ()> for Compiler {
             ExprType::Real(n) => {
                 self.write_constant((*n).into());
             }
-            ExprType::Bool(_) => todo!(),
+            ExprType::Bool(n) => {
+                self.write_constant((*n).into());
+            }
             ExprType::Null => todo!(),
             ExprType::Add(l, r) => {
                 self.visit_node(l, vm);

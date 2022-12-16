@@ -39,7 +39,7 @@ fn main() {
     }
     let mut vm = VM::new();
     let mut compiled = Compiler::compile(&ast, &vm);
-    compiled.disassemble("compiled");
+    compiled.disassemble("CLI compiled chunk");
     compiled.write(Instruction::Return.into(), 1);
     vm.interpret(compiled);
 }
