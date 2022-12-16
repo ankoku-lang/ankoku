@@ -20,6 +20,10 @@ pub enum ExprType {
     Subtract(Box<Expr>, Box<Expr>),
     Multiply(Box<Expr>, Box<Expr>),
     Divide(Box<Expr>, Box<Expr>),
+    Or(Box<Expr>, Box<Expr>),
+    And(Box<Expr>, Box<Expr>),
+    Greater(Box<Expr>, Box<Expr>),
+    Less(Box<Expr>, Box<Expr>),
     // Unary operations
     Negate(Box<Expr>),
     Not(Box<Expr>),
@@ -56,6 +60,8 @@ impl Display for Expr {
             ExprType::Subtract(l, r) => write!(f, "(- {} {})", l, r),
             ExprType::Multiply(l, r) => write!(f, "(* {} {})", l, r),
             ExprType::Divide(l, r) => write!(f, "(/ {} {})", l, r),
+            ExprType::Greater(l, r) => write!(f, "(> {} {})", l, r),
+            ExprType::Less(l, r) => write!(f, "(< {} {})", l, r),
             ExprType::Negate(inner) => write!(f, "(- {})", inner),
             ExprType::Not(inner) => write!(f, "(! {})", inner),
             ExprType::Grouping(inner) => write!(f, "{}", inner),
@@ -63,6 +69,8 @@ impl Display for Expr {
             ExprType::Var(v) => write!(f, "(get {})", v),
             ExprType::Assign(name, value) => write!(f, "(set {} to {:?})", name, value),
             ExprType::String(a) => write!(f, "({:?})", a),
+            ExprType::Or(l, r) => write!(f, "(|| {} {})", l, r),
+            ExprType::And(l, r) => write!(f, "(&& {} {})", l, r),
         }
     }
 }

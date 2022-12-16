@@ -70,7 +70,7 @@ pub enum ParserErrorType {
     ExpectEqualAfterIdentifierInObject,
     InvalidAssignmentTarget,
     UnclosedBlock,
-    ExpectedParenIf { before: bool },
+    ExpectedParen { before: bool },
 }
 impl AnkokuError for ParserError {
     fn msg(&self) -> &str {
@@ -93,11 +93,9 @@ impl AnkokuError for ParserError {
             }
             ParserErrorType::InvalidAssignmentTarget => "invalid assignment target",
             ParserErrorType::UnclosedBlock => "unclosed block, expected }",
-            ParserErrorType::ExpectedParenIf { before: true } => {
-                "expected paren after \"if\" keyword"
-            }
-            ParserErrorType::ExpectedParenIf { before: false } => {
-                "expected paren after if condition"
+            ParserErrorType::ExpectedParen { before: true } => "expected left paren for condition",
+            ParserErrorType::ExpectedParen { before: false } => {
+                "expected right paren after condition"
             }
         }
     }
@@ -113,7 +111,7 @@ impl AnkokuError for ParserError {
             ParserErrorType::ExpectEqualAfterIdentifierInObject => 2008,
             ParserErrorType::InvalidAssignmentTarget => 2009,
             ParserErrorType::UnclosedBlock => 2010,
-            ParserErrorType::ExpectedParenIf { .. } => 2011,
+            ParserErrorType::ExpectedParen { .. } => 2011,
         }
     }
 
@@ -198,10 +196,10 @@ impl Parser {
     fn var_decl(&mut self) -> ParserResult<Stmt> {
         let global = self.parse_variable(ParserErrorType::ExpectVariableName)?;
         let expr = if self.mtch(&[TokenType::Equal]) {
-            self.expression()
+            self.expression()?
         } else {
-            Ok(Expr::new(self.peek(), ExprType::Null))
-        }?;
+            Expr::new(self.peek(), ExprType::Null)
+        };
         self.expect_semi(Stmt::new(StmtType::Var(
             self.source[global.start..=global.start + global.length - 1]
                 .iter()
@@ -222,31 +220,13 @@ impl Parser {
         if self.mtch(&[TokenType::Print]) {
             self.print_statement()
         } else if self.mtch(&[TokenType::If]) {
-            self.consume(
-                TokenType::LParen,
-                ParserErrorType::ExpectedParenIf { before: true },
-            )?;
-            let condition = self.expression()?;
-            self.consume(
-                TokenType::RParen,
-                ParserErrorType::ExpectedParenIf { before: false },
-            )?;
-            let body = self.statement()?;
-            let else_body = if self.mtch(&[TokenType::Else]) {
-                Some(Box::new(self.statement()?))
-            } else {
-                None
-            };
-
-            Ok(Stmt::new(StmtType::If(
-                condition,
-                Box::new(body),
-                else_body,
-            )))
+            self.if_statement()
+        } else if self.mtch(&[TokenType::While]) {
+            self.while_statement()
         } else if self.mtch(&[TokenType::LBrace]) {
             let mut stmts = vec![];
             while !self.at_end() && !self.check(TokenType::RBrace) {
-                let stmt = self.declaration()?; // TODO: better error handling here, this only has the first error
+                let stmt = self.declaration()?; // TODO: better error handling here, this fails at the first error but it should collect all errors somehow
                 stmts.push(stmt);
             }
             self.consume(TokenType::RBrace, ParserErrorType::UnclosedBlock)?;
@@ -254,6 +234,42 @@ impl Parser {
         } else {
             self.expression_statement()
         }
+    }
+    fn while_statement(&mut self) -> ParserResult<Stmt> {
+        self.consume(
+            TokenType::LParen,
+            ParserErrorType::ExpectedParen { before: true },
+        )?;
+        let cond = self.expression()?;
+        self.consume(
+            TokenType::RParen,
+            ParserErrorType::ExpectedParen { before: false },
+        )?;
+        let body = self.statement()?;
+
+        Ok(Stmt::new(StmtType::While(cond, Box::new(body))))
+    }
+    fn if_statement(&mut self) -> ParserResult<Stmt> {
+        self.consume(
+            TokenType::LParen,
+            ParserErrorType::ExpectedParen { before: true },
+        )?;
+        let condition = self.expression()?;
+        self.consume(
+            TokenType::RParen,
+            ParserErrorType::ExpectedParen { before: false },
+        )?;
+        let body = self.statement()?;
+        let else_body = if self.mtch(&[TokenType::Else]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+        Ok(Stmt::new(StmtType::If(
+            condition,
+            Box::new(body),
+            else_body,
+        )))
     }
 
     fn expect_semi<T>(&mut self, a: T) -> ParserResult<T> {
@@ -293,7 +309,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> ParserResult<Expr> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         if self.mtch(&[TokenType::Equal]) {
             let equals = self.prev();
@@ -306,7 +322,58 @@ impl Parser {
             return Err(self.new_err(ParserErrorType::InvalidAssignmentTarget, self.peek()));
         }
 
+        if self.mtch(&[TokenType::PlusEqual, TokenType::MinusEqual]) {
+            let equals = self.prev();
+            let value = self.assignment()?;
+
+            if let ExprType::Var(name) = expr.kind {
+                let lhs = Box::new(Expr::new(self.prev(), ExprType::Var(name.clone())));
+                let rhs = Box::new(value);
+                return Ok(Expr::new(
+                    equals,
+                    ExprType::Assign(
+                        name,
+                        Box::new(Expr::new(
+                            self.prev(),
+                            if equals.kind == TokenType::PlusEqual {
+                                ExprType::Add(lhs, rhs)
+                            } else if equals.kind == TokenType::MinusEqual {
+                                ExprType::Subtract(lhs, rhs)
+                            } else {
+                                unreachable!()
+                            },
+                        )),
+                    ),
+                ));
+            }
+
+            return Err(self.new_err(ParserErrorType::InvalidAssignmentTarget, self.peek()));
+        }
+
         Ok(expr)
+    }
+
+    fn or(&mut self) -> ParserResult<Expr> {
+        let mut e = self.and()?;
+
+        while self.mtch(&[TokenType::Or]) {
+            let op = self.prev();
+            let right = self.and()?;
+            e = self.binop(op, e, right);
+        }
+
+        Ok(e)
+    }
+    fn and(&mut self) -> ParserResult<Expr> {
+        let mut e = self.equality()?;
+
+        while self.mtch(&[TokenType::And]) {
+            let op = self.prev();
+            let right = self.equality()?;
+            e = self.binop(op, e, right);
+        }
+
+        Ok(e)
     }
 
     pub fn equality(&mut self) -> ParserResult<Expr> {
@@ -496,6 +563,10 @@ impl Parser {
             TokenType::Minus => Expr::new(op, ExprType::Subtract(Box::new(left), Box::new(right))),
             TokenType::Star => Expr::new(op, ExprType::Multiply(Box::new(left), Box::new(right))),
             TokenType::Slash => Expr::new(op, ExprType::Divide(Box::new(left), Box::new(right))),
+            TokenType::And => Expr::new(op, ExprType::And(Box::new(left), Box::new(right))),
+            TokenType::Or => Expr::new(op, ExprType::Or(Box::new(left), Box::new(right))),
+            TokenType::Greater => Expr::new(op, ExprType::Greater(Box::new(left), Box::new(right))),
+            TokenType::Less => Expr::new(op, ExprType::Less(Box::new(left), Box::new(right))),
             _ => unimplemented!(),
         }
     }

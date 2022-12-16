@@ -277,6 +277,18 @@ impl VM {
                     let to = read_u32!();
                     self.ip = to;
                 }
+                // Greater
+                19 => {
+                    let b = self.stack_pop();
+                    let a = self.stack_pop();
+                    self.stack_push(a.greater(b, self));
+                }
+                // Less
+                20 => {
+                    let b = self.stack_pop();
+                    let a = self.stack_pop();
+                    self.stack_push(a.less(b, self));
+                }
                 _ => unimplemented!("instruction {}", instruction),
             }
         }

@@ -116,6 +116,24 @@ impl Compiler {
         self.chunk.code.len() - 4
     }
 
+    fn emit_loop(&mut self, loop_start: usize) {
+        self.chunk
+            .write(Instruction::Jump.into(), self.chunk.last_byte_line());
+        let offset = loop_start;
+        if offset > u32::MAX as usize {
+            panic!("Too much code to loop on.");
+        }
+
+        self.chunk
+            .write(((offset >> 24) & 0xff) as u8, self.chunk.last_byte_line());
+        self.chunk
+            .write(((offset >> 16) & 0xff) as u8, self.chunk.last_byte_line());
+        self.chunk
+            .write(((offset >> 8) & 0xff) as u8, self.chunk.last_byte_line());
+        self.chunk
+            .write((offset & 0xff) as u8, self.chunk.last_byte_line());
+    }
+
     fn patch_jump(&mut self, jmp_offset: usize) {
         let jump = self.chunk.code.len(); // TODO: WHY IS THIS BROKEN??!
 
@@ -191,6 +209,19 @@ impl AstVisitor<(), ()> for Compiler {
                     self.visit_stmt(else_body, vm);
                 }
                 self.patch_jump(else_jump);
+            }
+            StmtType::While(cond, body) => {
+                let loop_start = self.chunk.code.len();
+
+                self.visit_node(cond, vm);
+
+                let exit_jump = self.emit_jump(Instruction::JumpIfFalse);
+                write_byte!(Instruction::Pop.into());
+                self.visit_stmt(body, vm);
+                self.emit_loop(loop_start);
+
+                self.patch_jump(exit_jump);
+                write_byte!(Instruction::Pop.into());
             }
         }
     }
@@ -289,6 +320,38 @@ impl AstVisitor<(), ()> for Compiler {
                 self.write_constant(Value::Obj(
                     vm.alloc(Obj::new(ObjType::String(AnkokuString::new(s.to_string())))), // intern this too
                 ));
+            }
+            ExprType::And(l, r) => {
+                self.visit_node(l, vm);
+                let end_jump = self.emit_jump(Instruction::JumpIfFalse);
+
+                write_byte!(Instruction::Pop.into());
+                self.visit_node(r, vm);
+
+                self.patch_jump(end_jump);
+            }
+            ExprType::Or(l, r) => {
+                self.visit_node(l, vm);
+                let else_jump = self.emit_jump(Instruction::JumpIfFalse);
+                let end_jump = self.emit_jump(Instruction::Jump);
+
+                self.patch_jump(else_jump);
+                write_byte!(Instruction::Pop.into());
+
+                self.visit_node(r, vm);
+                self.patch_jump(end_jump);
+            }
+            ExprType::Greater(l, r) => {
+                self.visit_node(l, vm);
+                self.visit_node(r, vm);
+
+                write_byte!(Instruction::Greater.into());
+            }
+            ExprType::Less(l, r) => {
+                self.visit_node(l, vm);
+                self.visit_node(r, vm);
+
+                write_byte!(Instruction::Less.into());
             }
         };
     }

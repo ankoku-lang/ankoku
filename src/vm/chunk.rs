@@ -53,6 +53,8 @@ impl Chunk {
             | Instruction::Sub
             | Instruction::Mul
             | Instruction::Div
+            | Instruction::Less
+            | Instruction::Greater
             | Instruction::Not
             | Instruction::Pop
             | Instruction::Print

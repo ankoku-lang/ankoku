@@ -50,6 +50,8 @@ pub enum TokenType {
     Var,
     While,
     EOF,
+    PlusEqual,
+    MinusEqual,
 }
 pub type TokenizerResult<T> = Result<T, TokenizerError>;
 #[derive(Clone)]
@@ -182,8 +184,20 @@ impl Tokenizer {
             ';' => return Ok(self.new_token(TokenType::Semicolon)),
             ',' => return Ok(self.new_token(TokenType::Comma)),
             '.' => return Ok(self.new_token(TokenType::Dot)),
-            '-' => return Ok(self.new_token(TokenType::Minus)),
-            '+' => return Ok(self.new_token(TokenType::Plus)),
+            '-' => {
+                return Ok(self.new_token(if eqm {
+                    TokenType::MinusEqual
+                } else {
+                    TokenType::Minus
+                }))
+            }
+            '+' => {
+                return Ok(self.new_token(if eqm {
+                    TokenType::PlusEqual
+                } else {
+                    TokenType::Plus
+                }))
+            }
             '/' => {
                 return Ok(self.new_token(TokenType::Slash));
             }
@@ -217,18 +231,20 @@ impl Tokenizer {
                 }))
             }
             '&' => {
-                return Ok(self.new_token(if eqm {
+                let again = self.mtch('&');
+                return Ok(self.new_token(if again {
                     TokenType::And
                 } else {
                     TokenType::BitwiseAnd
-                }))
+                }));
             }
             '|' => {
-                return Ok(self.new_token(if eqm {
+                let again = self.mtch('|');
+                return Ok(self.new_token(if again {
                     TokenType::Or
                 } else {
                     TokenType::BitwiseOr
-                }))
+                }));
             }
             '"' => {
                 return self.string();

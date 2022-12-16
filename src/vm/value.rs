@@ -110,6 +110,18 @@ impl Value {
             _ => todo!("implement proper type errors here instead of panics"),
         }
     }
+    pub fn greater(self, rhs: Value, _gc: &VM) -> Value {
+        match (self, rhs) {
+            (Value::Real(l), Value::Real(r)) => (l > r).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
+    pub fn less(self, rhs: Value, _gc: &VM) -> Value {
+        match (self, rhs) {
+            (Value::Real(l), Value::Real(r)) => (l < r).into(),
+            _ => todo!("implement proper type errors here instead of panics"),
+        }
+    }
     pub fn neg(self, _gc: &VM) -> Value {
         match self {
             Value::Real(l) => (-l).into(),
@@ -128,7 +140,13 @@ impl Value {
             Value::Bool(b) => !*b,
             Value::Null => true,
             Value::Real(b) => *b != 0.0,
-            Value::Obj(o) => true,
+            Value::Obj(o) => {
+                if let ObjType::String(s) = &o.kind {
+                    s.as_str().is_empty()
+                } else {
+                    false
+                }
+            }
         }
     }
 }

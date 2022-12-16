@@ -33,4 +33,5 @@ pub enum StmtType {
     Var(String, Expr),
     Block(Vec<Stmt>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
 }
